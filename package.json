@@ -1,0 +1,20 @@
+{
+  "name": "local-tourism",
+  "version": "0.1.0",
+  "description": "Local Tourism Package Booking System (no frameworks)",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "db:setup": "echo Run: mysql -u root -p < database/schema.sql && mysql -u root -p < database/seed.sql"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.8",
+    "mysql2": "^3.24.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
