@@ -1,25 +1,30 @@
 # Local Tourism Package Booking System
 
-Framework-free web app: HTML/CSS/vanilla JS frontend, Node.js `http` backend, MySQL.
+A framework-free web application for browsing and booking local tourism packages. Built for a Web Technology course.
 
-## Setup
-1. Install Node.js 18+ and MySQL 8 (or MariaDB).
-2. `npm install`
-3. Create the DB user and database:
-   ```
-   sudo mysql -e "CREATE USER 'tourism_user'@'localhost' IDENTIFIED BY 'change_me';"
-   sudo mysql < database/schema.sql
-   sudo mysql < database/seed.sql
-   sudo mysql -e "GRANT ALL ON local_tourism.* TO 'tourism_user'@'localhost'; FLUSH PRIVILEGES;"
-   ```
-4. `cp .env.example .env` and set the same password you used above.
-5. Start: `npm start` (or `npm run dev` with auto-reload).
-6. Open http://localhost:3000 and http://localhost:3000/api/health
+## Roles
+Customer · Provider (local guide) · Admin · Super Admin
 
-## Structure
+## Tech stack
+HTML5, CSS3, vanilla JavaScript (DOM + Fetch API) · Node.js built-in `http` module · MySQL/MariaDB via `mysql2`.
+No frontend or backend frameworks.
+
+## Prerequisites
+Node.js 18+ and MySQL 8 or MariaDB (running locally).
+
+## Quick start
+1. `npm install`
+2. Copy `.env.example` to `.env` and fill in your database credentials.
+3. Create the database, tables and app user (see [DEVELOPER.md](DEVELOPER.md#database-setup)).
+4. `npm start` (or `npm run dev` for auto-reload)
+5. Open http://localhost:3000
+
+## Project structure
 ```
 frontend/   public pages, role folders (customer, provider, admin, superadmin), css/, js/, assets/
 backend/    server.js, config/, routes/, controllers/, middleware/, services/, utils/
 database/   schema.sql, seed.sql, migrations/
 ```
-See `CLAUDE.md` for conventions.
+
+## For contributors
+Setup details, API endpoints, database notes and the changelog live in [DEVELOPER.md](DEVELOPER.md).  It also contains the project conventions.
