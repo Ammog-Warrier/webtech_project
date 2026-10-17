@@ -3,11 +3,22 @@
 Living document. **Update it in the same pull request whenever you add or change an endpoint, table, env variable, script or setup step.**
 
 ## Database setup
-Each collaborator uses their own local database and `.env` (never commit `.env`).
-1. Make sure MySQL/MariaDB is running.
-2. As a database admin user, run `database/schema.sql`, then `database/seed.sql`.
-3. Create an application user matching `DB_USER` / `DB_PASSWORD` in `.env`, with privileges **only** on `local_tourism`. Do not use root in the app.
-4. `npm start` should print "Database connected"; `/api/health` should report `"database":"connected"`.
+Each collaborator uses their own local database and `.env` (never commit `.env`). After pulling the repo:
+
+1. Install Node.js 18+ and MySQL 8 or MariaDB, and make sure the server is running.
+2. `npm install`, then copy `.env.example` to `.env` and choose your own `DB_PASSWORD`.
+3. **One-time, as a DB admin (root):** run `database/schema.sql` (creates the database and all tables), then create the app user from your `.env` values, limited to this database:
+   ```sql
+   CREATE USER IF NOT EXISTS 'tourism_user'@'localhost' IDENTIFIED BY '<DB_PASSWORD>';
+   GRANT ALL PRIVILEGES ON local_tourism.* TO 'tourism_user'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+4. Load the seed data: run `database/seed.sql` (safe to re-run; it won't duplicate rows).
+5. `npm start` should print "Database connected"; `/api/health` should report `"database":"connected"`.
+
+**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Example with the MariaDB/MySQL CLI: `mysql -u tourism_user -p local_tourism < database/migrations/001_destinations_packages.sql`.
+
+Rule: every schema change = a new numbered migration **and** the same change in `schema.sql`.
 
 ## Environment variables (`.env`)
 | Variable | Purpose | Default in `.env.example` |
@@ -31,12 +42,16 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | /api/health | Public | Server and database status |
+| GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
+| GET | /api/packages | Public | All packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
 
 ## Database tables
 | Table | Notes |
 |---|---|
 | roles | CUSTOMER, PROVIDER, ADMIN, SUPER_ADMIN (seeded) |
 | users | `role_id` FK to roles; `password_hash` (bcryptjs) |
+| destinations | `name` unique, `description`, `image_url` (seeded: Mountains, Beaches, Cities) |
+| packages | `destination_id` FK, `title` unique, `price`, `duration_days`, `image_url` (6 seeded) |
 
 Schema changes: add `database/migrations/NNN_description.sql` and update `schema.sql`.
 
@@ -49,7 +64,12 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 ## Frontend pages
 | Page | Status |
 |---|---|
-| index, login, register, destinations, packages | Layout only; login/register/destinations/packages are placeholders |
+| index | Landing page (static content) |
+| destinations | Working: lists destinations from the API, links to filtered packages |
+| packages | Working: lists packages, filter by destination |
+| login, register | Placeholders |
+
+Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders). Images live in `frontend/assets/img/` (served locally; no hotlinking).
 
 ## Conventions
 **Technology (strict):** only HTML5, CSS3, vanilla JS, Node built-ins (`http`), MySQL/MariaDB with `mysql2`, plus `dotenv`, `bcryptjs`, `nodemon` (dev). No frameworks (Express, React, Vue, Angular, Next.js, Bootstrap, Tailwind) and no ORMs. Ask the team before adding any dependency.
@@ -67,4 +87,5 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+- 2026-10-17: Destinations and packages (tables, migration 001, seed, list endpoints, pages, local images).
 - 2026-10-17: Initial foundation (server, static serving, health endpoint, DB pool, roles/users schema).

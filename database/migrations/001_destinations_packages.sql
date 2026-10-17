@@ -1,0 +1,20 @@
+-- Adds destinations and packages. Safe to re-run.
+CREATE TABLE IF NOT EXISTS destinations (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  description TEXT NOT NULL,
+  image_url VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS packages (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  destination_id INT UNSIGNED NOT NULL,
+  title VARCHAR(150) NOT NULL UNIQUE,
+  description TEXT NOT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  duration_days TINYINT UNSIGNED NOT NULL,
+  image_url VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_packages_destination FOREIGN KEY (destination_id) REFERENCES destinations(id)
+) ENGINE=InnoDB;

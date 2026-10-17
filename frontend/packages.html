@@ -14,9 +14,13 @@
       <a href="/login.html">Login</a><a class="btn btn-primary" href="/register.html">Register</a>
     </nav>
   </div></header>
-  <main class="section"><div class="container"><h2>Packages</h2><p>Coming soon.</p></div></main>
+  <main class="section"><div class="container"><h2>Packages</h2>
+    <div class="filter"><label for="destination-filter">Destination:</label><select id="destination-filter"><option value="">All destinations</option></select></div>
+    <div class="grid" id="packages-grid"><p class="muted">Loading…</p></div></div></main>
   <footer class="site-footer"><div class="container"><span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
   <script src="/js/api.js"></script>
   <script src="/js/main.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/packages.js"></script>
 </body>
 </html>
