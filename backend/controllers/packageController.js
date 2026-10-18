@@ -1,5 +1,5 @@
 const { ok, fail } = require('../utils/response');
-const { listPackages } = require('../services/packageService');
+const { listPackages, findPackage } = require('../services/packageService');
 
 async function getPackages(req, res) {
   const { searchParams } = new URL(req.url, 'http://localhost');
@@ -11,4 +11,11 @@ async function getPackages(req, res) {
   ok(res, await listPackages(destinationId));
 }
 
-module.exports = { getPackages };
+async function getPackage(req, res) {
+  if (!/^\d+$/.test(req.params.id)) return fail(res, 400, 'id must be an integer');
+  const pkg = await findPackage(Number(req.params.id));
+  if (!pkg) return fail(res, 404, 'Package not found');
+  ok(res, pkg);
+}
+
+module.exports = { getPackages, getPackage };

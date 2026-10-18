@@ -18,7 +18,8 @@ async function loadPackages() {
           p.title,
           { text: `${p.destination_name} · ${p.duration_days} day(s)`, cls: 'muted' },
           { text: p.description },
-          { text: `$${Number(p.price).toFixed(2)}`, cls: 'price' }
+          { text: `$${Number(p.price).toFixed(2)}`, cls: 'price' },
+          { text: 'View details', href: `/package.html?id=${p.id}` }
         )
       )
     );

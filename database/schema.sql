@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(id)
 ) ENGINE=InnoDB;
 
--- 001_destinations_packages
+-- 001_destinations_packages (packages also includes 002_package_details)
 CREATE TABLE IF NOT EXISTS destinations (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL UNIQUE,
@@ -31,8 +31,11 @@ CREATE TABLE IF NOT EXISTS packages (
   destination_id INT UNSIGNED NOT NULL,
   title VARCHAR(150) NOT NULL UNIQUE,
   description TEXT NOT NULL,
+  itinerary TEXT NULL,
+  inclusions TEXT NULL,
   price DECIMAL(10,2) NOT NULL,
   duration_days TINYINT UNSIGNED NOT NULL,
+  max_group_size SMALLINT UNSIGNED NOT NULL DEFAULT 12,
   image_url VARCHAR(255) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_packages_destination FOREIGN KEY (destination_id) REFERENCES destinations(id)

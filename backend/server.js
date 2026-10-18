@@ -3,6 +3,7 @@ const http = require('http');
 const routes = require('./routes');
 const { serveStatic } = require('./middleware/static');
 const { fail } = require('./utils/response');
+const { matchRoute } = require('./utils/matchRoute');
 const { testConnection } = require('./config/db');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -12,9 +13,10 @@ const server = http.createServer(async (req, res) => {
     const { pathname } = new URL(req.url, `http://${req.headers.host}`);
 
     if (pathname.startsWith('/api/')) {
-      const handler = routes[`${req.method} ${pathname}`];
-      if (!handler) return fail(res, 404, 'API route not found');
-      return await handler(req, res);
+      const match = matchRoute(routes, req.method, pathname);
+      if (!match) return fail(res, 404, 'API route not found');
+      req.params = match.params;
+      return await match.handler(req, res);
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'Method not allowed');

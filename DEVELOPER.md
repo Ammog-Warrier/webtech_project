@@ -16,7 +16,7 @@ Each collaborator uses their own local database and `.env` (never commit `.env`)
 4. Load the seed data: run `database/seed.sql` (safe to re-run; it won't duplicate rows).
 5. `npm start` should print "Database connected"; `/api/health` should report `"database":"connected"`.
 
-**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Example with the MariaDB/MySQL CLI: `mysql -u tourism_user -p local_tourism < database/migrations/001_destinations_packages.sql`.
+**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Run each migration once, in order (e.g. `mysql -u tourism_user -p local_tourism < database/migrations/002_package_details.sql`); only 001 is safe to re-run.
 
 Rule: every schema change = a new numbered migration **and** the same change in `schema.sql`.
 
@@ -44,6 +44,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/health | Public | Server and database status |
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
 | GET | /api/packages | Public | All packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
+| GET | /api/packages/:id | Public | One package with detail fields (`itinerary` and `inclusions` as arrays, `max_group_size`); 400 if id is not an integer, 404 if missing |
 
 ## Database tables
 | Table | Notes |
@@ -51,14 +52,14 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | roles | CUSTOMER, PROVIDER, ADMIN, SUPER_ADMIN (seeded) |
 | users | `role_id` FK to roles; `password_hash` (bcryptjs) |
 | destinations | `name` unique, `description`, `image_url` (seeded: Mountains, Beaches, Cities) |
-| packages | `destination_id` FK, `title` unique, `price`, `duration_days`, `image_url` (6 seeded) |
+| packages | `destination_id` FK, `title` unique, `price`, `duration_days`, `image_url`, `itinerary` and `inclusions` (text, one item per line), `max_group_size` (6 seeded) |
 
 Schema changes: add `database/migrations/NNN_description.sql` and update `schema.sql`.
 
 ## Adding a feature
 1. Service in `backend/services/` (SQL, parameterized).
 2. Controller in `backend/controllers/`.
-3. Register `'METHOD /api/path'` in `backend/routes/index.js`.
+3. Register `'METHOD /api/path'` in `backend/routes/index.js`. Use `:name` for path parameters (e.g. `'GET /api/packages/:id'`); the value is available as `req.params.name`.
 4. Update this file (endpoints, tables, env vars).
 
 ## Frontend pages
@@ -66,7 +67,8 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 |---|---|
 | index | Landing page (static content) |
 | destinations | Working: lists destinations from the API, links to filtered packages |
-| packages | Working: lists packages, filter by destination |
+| packages | Working: lists packages, filter by destination, links to the detail page |
+| package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size) |
 | login, register | Placeholders |
 
 Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders). Images live in `frontend/assets/img/` (served locally; no hotlinking).
@@ -87,5 +89,6 @@ Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+- 2026-10-18: Package detail page (migration 002, `GET /api/packages/:id`, path-parameter routing, `package.html`).
 - 2026-10-17: Destinations and packages (tables, migration 001, seed, list endpoints, pages, local images).
 - 2026-10-17: Initial foundation (server, static serving, health endpoint, DB pool, roles/users schema).

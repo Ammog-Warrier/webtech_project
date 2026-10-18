@@ -14,7 +14,12 @@ function card(imageUrl, title, ...lines) {
   img.loading = 'lazy';
   const body = el('div', 'card-body');
   body.append(el('h3', null, title));
-  lines.forEach((l) => body.append(el('p', l.cls, l.text)));
+  lines.forEach((l) => {
+    if (!l.href) return body.append(el('p', l.cls, l.text));
+    const link = el('a', 'btn btn-primary', l.text);
+    link.href = l.href;
+    body.append(link);
+  });
   article.append(img, body);
   return article;
 }
