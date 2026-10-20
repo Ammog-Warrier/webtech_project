@@ -24,20 +24,7 @@ function initTheme() {
   const currentTheme = getPreferredTheme();
   applyTheme(currentTheme);
 
-  // Auto-inject toggle button into .nav if not explicitly present
-  let toggleBtn = document.getElementById('theme-toggle');
-  if (!toggleBtn) {
-    const nav = document.querySelector('.nav');
-    if (nav) {
-      toggleBtn = document.createElement('button');
-      toggleBtn.type = 'button';
-      toggleBtn.id = 'theme-toggle';
-      toggleBtn.className = 'theme-toggle';
-      nav.appendChild(toggleBtn);
-      applyTheme(currentTheme);
-    }
-  }
-
+  const toggleBtn = document.getElementById('theme-toggle');
   if (toggleBtn && !toggleBtn.dataset.bound) {
     toggleBtn.dataset.bound = 'true';
     toggleBtn.addEventListener('click', () => {
@@ -70,10 +57,31 @@ async function showHealth() {
   }
 }
 
-// Run immediately for fast theme paint before full DOM render if head script exists
-initTheme();
+// Prevent unnecessary page reload/flash when clicking a link that leads to the current page
+function preventSamePageReload() {
+  const currentPath = window.location.pathname.replace(/\/index\.html$/, '/') || '/';
+  document.querySelectorAll('.nav a').forEach((link) => {
+    const href = link.getAttribute('href');
+    if (!href) return;
+    const targetPath = href.replace(/\/index\.html$/, '') || '/';
+    if (targetPath === currentPath) {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+  });
+}
+
+// Run theme attribute immediately on script load so dark colors apply without flashing
+(function() {
+  const currentTheme = getPreferredTheme();
+  document.documentElement.setAttribute('data-theme', currentTheme);
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
+  preventSamePageReload();
   showHealth();
 });
 

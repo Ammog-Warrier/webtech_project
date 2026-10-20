@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Packages · Local Tourism</title>
   <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var s = localStorage.getItem('lt_theme');
+      var t = (s === 'dark' || s === 'light') ? s : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
 </head>
 <body>
   <header class="site-header"><div class="container">
@@ -12,6 +19,7 @@
     <nav class="nav">
       <a href="/">Home</a><a href="/destinations.html">Destinations</a><a href="/packages.html">Packages</a>
       <a href="/login.html">Login</a><a class="btn btn-primary" href="/register.html">Register</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
     </nav>
   </div></header>
   <main class="section"><div class="container"><h2>Packages</h2>
