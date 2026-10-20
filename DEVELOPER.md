@@ -71,7 +71,7 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 | package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size) |
 | login, register | Placeholders |
 
-Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders). Images live in `frontend/assets/img/` (served locally; no hotlinking).
+Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders), `js/main.js` (health check & dark/light mode toggle with persistence). Images live in `frontend/assets/img/` (served locally; no hotlinking).
 
 ## Conventions
 **Technology (strict):** only HTML5, CSS3, vanilla JS, Node built-ins (`http`), MySQL/MariaDB with `mysql2`, plus `dotenv`, `bcryptjs`, `nodemon` (dev). No frameworks (Express, React, Vue, Angular, Next.js, Bootstrap, Tailwind) and no ORMs. Ask the team before adding any dependency.
@@ -89,6 +89,7 @@ Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+- 2026-10-21: Dark mode support (CSS variables in `style.css`, animated toggle in `main.js`, `localStorage` & `prefers-color-scheme` persistence across all pages).
 - 2026-10-18: Package detail page (migration 002, `GET /api/packages/:id`, path-parameter routing, `package.html`).
 - 2026-10-17: Destinations and packages (tables, migration 001, seed, list endpoints, pages, local images).
 - 2026-10-17: Initial foundation (server, static serving, health endpoint, DB pool, roles/users schema).
