@@ -31,6 +31,7 @@ Rule: every schema change = a new numbered migration **and** the same change in 
 | DB_USER | Application DB user | tourism_user |
 | DB_PASSWORD | Application DB password | change_me |
 | DB_NAME | Database name | local_tourism |
+| AUTH_SECRET | Secret used to sign login tokens; use a long random string, never share or commit it. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` | change_me_to_a_long_random_string |
 
 ## npm scripts
 | Script | Description |
@@ -47,6 +48,8 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
 | GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
 | GET | /api/packages/:id | Public | One package with detail fields (`itinerary` and `inclusions` as arrays, `max_group_size`); 400 if id is not an integer, 404 if missing |
+| POST | /api/auth/register | Public | Create an account. Body: `full_name`, `email`, `password` (8-72 chars), optional `phone`, optional `role` (`CUSTOMER` default, or `PROVIDER`; providers start with `provider_status` PENDING). Returns the user (201). 400 invalid input, 409 email already registered. Admin accounts cannot be self-registered |
+| POST | /api/auth/login | Public | Body: `email`, `password`. Returns `{ token, user }`. 400 missing fields, 401 wrong email or password (same message for both), 403 account disabled |
 
 ## Database tables
 | Table | Notes |
@@ -60,6 +63,9 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | payments | **Simulated** (no real gateway): `booking_id` FK (unique, one per booking), `amount`, `method` CARD / UPI / NET_BANKING, `status` PAID / REFUNDED, `paid_at` |
 | reviews | `booking_id` FK (unique, one review per booking), `rating` 1-5 (CHECK), `comment` |
 | audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at` |
+
+### Authentication
+Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client will send it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`; the auth/role middleware that uses `verifyToken` is not built yet, so no endpoint is protected so far. The frontend login and register pages are still placeholders.
 
 Tables for bookings, payments, reviews and audit logs exist, but no API or UI uses them yet.
 
@@ -117,6 +123,7 @@ Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+- 2026-10-28: Auth endpoints `POST /api/auth/register` and `POST /api/auth/login` (signed tokens, new `AUTH_SECRET` env variable).
 - 2026-10-27: Full database schema: migrations 003-008 (user status and provider approval, package ownership and moderation, departures, bookings, simulated payments, reviews, audit logs); demo accounts and departures in the seed; public package endpoints now return APPROVED packages only.
 - 2026-10-21: Dark mode support (CSS variables in `style.css`, animated toggle in `main.js`, `localStorage` & `prefers-color-scheme` persistence across all pages).
 - 2026-10-18: Package detail page (migration 002, `GET /api/packages/:id`, path-parameter routing, `package.html`).

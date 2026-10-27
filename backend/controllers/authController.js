@@ -1,0 +1,36 @@
+const { ok, fail } = require('../utils/response');
+const { parseJsonBody } = require('../utils/body');
+const { registerUser, loginUser } = require('../services/authService');
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isText = (value) => typeof value === 'string';
+
+async function register(req, res) {
+  const body = await parseJsonBody(req);
+  const fullName = isText(body.full_name) ? body.full_name.trim() : '';
+  const email = isText(body.email) ? body.email.trim().toLowerCase() : '';
+  const phone = isText(body.phone) && body.phone.trim() ? body.phone.trim() : null;
+  const role = body.role === undefined ? 'CUSTOMER' : body.role;
+
+  if (!fullName || fullName.length > 100) return fail(res, 400, 'Full name is required (max 100 characters)');
+  if (!EMAIL_PATTERN.test(email) || email.length > 150) return fail(res, 400, 'A valid email is required');
+  if (phone && !/^[0-9+()\- ]{6,20}$/.test(phone)) return fail(res, 400, 'Phone number is not valid');
+  // bcrypt only uses the first 72 bytes, so longer passwords are rejected rather than silently cut.
+  if (!isText(body.password) || body.password.length < 8 || Buffer.byteLength(body.password) > 72) {
+    return fail(res, 400, 'Password must be 8 to 72 characters');
+  }
+  if (role !== 'CUSTOMER' && role !== 'PROVIDER') return fail(res, 400, 'Role must be CUSTOMER or PROVIDER');
+
+  ok(res, await registerUser({ fullName, email, phone, password: body.password, role }), 201);
+}
+
+async function login(req, res) {
+  const body = await parseJsonBody(req);
+  const email = isText(body.email) ? body.email.trim().toLowerCase() : '';
+  if (!email || !isText(body.password) || !body.password) {
+    return fail(res, 400, 'Email and password are required');
+  }
+  ok(res, await loginUser(email, body.password));
+}
+
+module.exports = { register, login };
