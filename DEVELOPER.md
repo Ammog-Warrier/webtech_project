@@ -16,7 +16,9 @@ Each collaborator uses their own local database and `.env` (never commit `.env`)
 4. Load the seed data: run `database/seed.sql` (safe to re-run; it won't duplicate rows).
 5. `npm start` should print "Database connected"; `/api/health` should report `"database":"connected"`.
 
-**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Run each migration once, in order (e.g. `mysql -u tourism_user -p local_tourism < database/migrations/002_package_details.sql`); only 001 is safe to re-run.
+**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Run each migration once, in order (e.g. `mysql -u tourism_user -p local_tourism < database/migrations/003_user_status.sql`). 001, 005, 006, 007 and 008 are safe to re-run; 002, 003 and 004 are not (they use `ALTER TABLE`).
+
+**Demo accounts (development only, created by `seed.sql`):** `customer@`, `provider@`, `admin@`, `superadmin@example.com`, all with password `Demo@1234`. Never use these outside local development.
 
 Rule: every schema change = a new numbered migration **and** the same change in `schema.sql`.
 
@@ -43,16 +45,42 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 |---|---|---|---|
 | GET | /api/health | Public | Server and database status |
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
-| GET | /api/packages | Public | All packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
+| GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
 | GET | /api/packages/:id | Public | One package with detail fields (`itinerary` and `inclusions` as arrays, `max_group_size`); 400 if id is not an integer, 404 if missing |
 
 ## Database tables
 | Table | Notes |
 |---|---|
 | roles | CUSTOMER, PROVIDER, ADMIN, SUPER_ADMIN (seeded) |
-| users | `role_id` FK to roles; `password_hash` (bcryptjs) |
+| users | `role_id` FK to roles; `password_hash` (bcryptjs); `phone` (optional); `is_active` (0 = account disabled); `provider_status` NOT_APPLICABLE / PENDING / APPROVED / REJECTED (only used for PROVIDER accounts; a provider must be APPROVED before publishing packages) |
 | destinations | `name` unique, `description`, `image_url` (seeded: Mountains, Beaches, Cities) |
-| packages | `destination_id` FK, `title` unique, `price`, `duration_days`, `image_url`, `itinerary` and `inclusions` (text, one item per line), `max_group_size` (6 seeded) |
+| packages | `destination_id` FK, `title` unique, `price`, `duration_days`, `image_url`, `itinerary` and `inclusions` (text, one item per line), `max_group_size` (6 seeded), `provider_id` FK to users (owner), `status` PENDING / APPROVED / REJECTED / ARCHIVED (only APPROVED packages are public) |
+| package_departures | Bookable dates: `package_id` FK, `start_date`, `seats_total`; unique per (package, date). Seeded: two per package (30 and 60 days after seeding) |
+| bookings | `customer_id` FK to users, `departure_id` FK, `num_guests`, `total_price` (snapshot of price x guests), `status` PENDING / CONFIRMED / CANCELLED / COMPLETED |
+| payments | **Simulated** (no real gateway): `booking_id` FK (unique, one per booking), `amount`, `method` CARD / UPI / NET_BANKING, `status` PAID / REFUNDED, `paid_at` |
+| reviews | `booking_id` FK (unique, one review per booking), `rating` 1-5 (CHECK), `comment` |
+| audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at` |
+
+Tables for bookings, payments, reviews and audit logs exist, but no API or UI uses them yet.
+
+### Business rules (enforced in services, not just the UI)
+- **Seats left** for a departure = `seats_total` minus the `num_guests` of its PENDING and CONFIRMED bookings. A booking must not exceed it.
+- **Booking lifecycle:** PENDING (created) -> CONFIRMED (payment made) -> COMPLETED (after the start date). CANCELLED is allowed from PENDING or CONFIRMED (a CONFIRMED cancel marks the payment REFUNDED).
+- **Payment (simulated):** the customer selects a method and presses Pay; the server records a PAID payment and confirms the booking in one transaction. No card details are collected or stored.
+- **Reviews:** only for the customer's own COMPLETED booking, once per booking.
+- **Provider approval:** new providers start PENDING; an admin approves/rejects. New packages start PENDING; an admin approves/rejects them.
+- **Audit logging:** admin and super admin actions (approvals, user changes) write a row to `audit_logs`.
+
+### Roles and permissions (planned; enforced by backend middleware once auth exists)
+| Action | Customer | Provider | Admin | Super Admin |
+|---|---|---|---|---|
+| Browse approved packages | yes | yes | yes | yes |
+| Book, pay, cancel own booking, review | yes | | | |
+| Create/edit own packages and departures | | approved providers | | |
+| View bookings of own packages | | yes | | |
+| Approve/reject providers and packages | | | yes | yes |
+| Enable/disable customer and provider accounts | | | yes | yes |
+| Manage admin accounts and view audit logs | | | | yes |
 
 Schema changes: add `database/migrations/NNN_description.sql` and update `schema.sql`.
 
@@ -89,6 +117,7 @@ Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+- 2026-10-27: Full database schema: migrations 003-008 (user status and provider approval, package ownership and moderation, departures, bookings, simulated payments, reviews, audit logs); demo accounts and departures in the seed; public package endpoints now return APPROVED packages only.
 - 2026-10-21: Dark mode support (CSS variables in `style.css`, animated toggle in `main.js`, `localStorage` & `prefers-color-scheme` persistence across all pages).
 - 2026-10-18: Package detail page (migration 002, `GET /api/packages/:id`, path-parameter routing, `package.html`).
 - 2026-10-17: Destinations and packages (tables, migration 001, seed, list endpoints, pages, local images).

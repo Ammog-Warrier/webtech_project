@@ -41,3 +41,23 @@ UPDATE packages SET max_group_size = 12,
   itinerary = 'Day 1: Old quarter and museum visit\nDay 2: Market tour and heritage monuments',
   inclusions = 'Local guide\nMuseum tickets\nCity hotel (1 night)'
 WHERE title = 'Heritage City Break';
+
+-- Demo accounts, one per role (development only). Password for all: Demo@1234
+INSERT IGNORE INTO users (role_id, full_name, email, password_hash, provider_status)
+SELECT r.id, a.full_name, a.email, '$2b$10$vzq5nzldHbMCIYj6sBw1XOFttXjk/9eP1898PfePSztdoHCsxuA6a', a.provider_status
+FROM (
+  SELECT 'CUSTOMER' role, 'Demo Customer' full_name, 'customer@example.com' email, 'NOT_APPLICABLE' provider_status
+  UNION ALL SELECT 'PROVIDER', 'Demo Provider', 'provider@example.com', 'APPROVED'
+  UNION ALL SELECT 'ADMIN', 'Demo Admin', 'admin@example.com', 'NOT_APPLICABLE'
+  UNION ALL SELECT 'SUPER_ADMIN', 'Demo Super Admin', 'superadmin@example.com', 'NOT_APPLICABLE'
+) a JOIN roles r ON r.name = a.role;
+
+-- Seeded packages belong to the demo provider and are already approved.
+UPDATE packages SET provider_id = (SELECT id FROM users WHERE email = 'provider@example.com'), status = 'APPROVED'
+WHERE provider_id IS NULL;
+
+-- Departures: two per package, only for packages that have none yet (safe to re-run).
+INSERT INTO package_departures (package_id, start_date, seats_total)
+SELECT p.id, DATE_ADD(CURDATE(), INTERVAL o.days DAY), p.max_group_size
+FROM packages p JOIN (SELECT 30 days UNION ALL SELECT 60) o
+WHERE NOT EXISTS (SELECT 1 FROM package_departures d WHERE d.package_id = p.id);
