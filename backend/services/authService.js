@@ -51,4 +51,14 @@ async function loginUser(email, password) {
   return { token: createToken(user.id, user.role), user: toPublicUser(user) };
 }
 
-module.exports = { registerUser, loginUser };
+async function getUserById(id) {
+  const [rows] = await pool.execute(`${USER_SELECT} WHERE u.id = ?`, [id]);
+  const user = rows[0];
+  if (!user) return null;
+  return {
+    ...toPublicUser(user),
+    is_active: Boolean(user.is_active),
+  };
+}
+
+module.exports = { registerUser, loginUser, getUserById, toPublicUser };

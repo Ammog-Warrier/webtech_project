@@ -50,6 +50,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/packages/:id | Public | One package with detail fields (`itinerary` and `inclusions` as arrays, `max_group_size`); 400 if id is not an integer, 404 if missing |
 | POST | /api/auth/register | Public | Create an account. Body: `full_name`, `email`, `password` (8-72 chars), optional `phone`, optional `role` (`CUSTOMER` default, or `PROVIDER`; providers start with `provider_status` PENDING). Returns the user (201). 400 invalid input, 409 email already registered. Admin accounts cannot be self-registered |
 | POST | /api/auth/login | Public | Body: `email`, `password`. Returns `{ token, user }`. 400 missing fields, 401 wrong email or password (same message for both), 403 account disabled |
+| GET | /api/auth/me | Bearer token | Return currently authenticated user (`id, full_name, email, phone, role, provider_status`). 401 unauthenticated, 403 account disabled |
 
 ## Database tables
 | Table | Notes |
@@ -65,7 +66,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at` |
 
 ### Authentication
-Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client will send it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`; the auth/role middleware that uses `verifyToken` is not built yet, so no endpoint is protected so far. The frontend login and register pages are still placeholders.
+Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client sends it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`. `backend/middleware/auth.js` provides `requireAuth(handler)` and `requireRole(allowedRoles, handler)`.
 
 Tables for bookings, payments, reviews and audit logs exist, but no API or UI uses them yet.
 
@@ -77,7 +78,7 @@ Tables for bookings, payments, reviews and audit logs exist, but no API or UI us
 - **Provider approval:** new providers start PENDING; an admin approves/rejects. New packages start PENDING; an admin approves/rejects them.
 - **Audit logging:** admin and super admin actions (approvals, user changes) write a row to `audit_logs`.
 
-### Roles and permissions (planned; enforced by backend middleware once auth exists)
+### Roles and permissions (enforced by backend middleware)
 | Action | Customer | Provider | Admin | Super Admin |
 |---|---|---|---|---|
 | Browse approved packages | yes | yes | yes | yes |
@@ -103,9 +104,10 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 | destinations | Working: lists destinations from the API, links to filtered packages |
 | packages | Working: lists packages, filter by destination, links to the detail page |
 | package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size) |
-| login, register | Placeholders |
+| login | Working: token authentication, error alerts, redirect by role |
+| register | Working: customer/provider sign-up, validation, auto-login & redirect |
 
-Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders), `js/main.js` (health check & dark/light mode toggle with persistence). Images live in `frontend/assets/img/` (served locally; no hotlinking).
+Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/auth.js` (token & session helpers), `js/render.js` (safe DOM builders), `js/main.js` (health check, dark/light mode toggle, dynamic navbar auth state). Images live in `frontend/assets/img/` (served locally; no hotlinking).
 
 ## Conventions
 **Technology (strict):** only HTML5, CSS3, vanilla JS, Node built-ins (`http`), MySQL/MariaDB with `mysql2`, plus `dotenv`, `bcryptjs`, `nodemon` (dev). No frameworks (Express, React, Vue, Angular, Next.js, Bootstrap, Tailwind) and no ORMs. Ask the team before adding any dependency.
@@ -123,9 +125,12 @@ Frontend helpers: `js/api.js` (fetch wrapper), `js/render.js` (safe DOM builders
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+- 2026-10-28: Auth UX refinements: added logout confirmation modal, fixed bfcache back-navigation redirection on login and register pages (pageshow and window.location.replace), and updated registration progress status indicators.
+- 2026-10-28: Auth middleware (`requireAuth`, `requireRole`) in `backend/middleware/auth.js`, `GET /api/auth/me` endpoint, wired `login.html` and `register.html` with client validation, token storage, and dynamic navbar state with role-based redirection.
 - 2026-10-28: Auth endpoints `POST /api/auth/register` and `POST /api/auth/login` (signed tokens, new `AUTH_SECRET` env variable).
 - 2026-10-27: Full database schema: migrations 003-008 (user status and provider approval, package ownership and moderation, departures, bookings, simulated payments, reviews, audit logs); demo accounts and departures in the seed; public package endpoints now return APPROVED packages only.
 - 2026-10-21: Dark mode support (CSS variables in `style.css`, animated toggle in `main.js`, `localStorage` & `prefers-color-scheme` persistence across all pages).
 - 2026-10-18: Package detail page (migration 002, `GET /api/packages/:id`, path-parameter routing, `package.html`).
 - 2026-10-17: Destinations and packages (tables, migration 001, seed, list endpoints, pages, local images).
 - 2026-10-17: Initial foundation (server, static serving, health endpoint, DB pool, roles/users schema).
+

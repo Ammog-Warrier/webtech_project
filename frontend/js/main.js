@@ -73,15 +73,153 @@ function preventSamePageReload() {
   });
 }
 
+function showLogoutConfirmation() {
+  const existing = document.getElementById('logout-modal');
+  if (existing) existing.remove();
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'logout-modal';
+  backdrop.className = 'modal-backdrop';
+  backdrop.setAttribute('role', 'dialog');
+  backdrop.setAttribute('aria-modal', 'true');
+  backdrop.setAttribute('aria-labelledby', 'logout-modal-title');
+
+  const dialog = document.createElement('div');
+  dialog.className = 'modal-dialog';
+
+  const title = document.createElement('h3');
+  title.id = 'logout-modal-title';
+  title.className = 'modal-title';
+  title.textContent = 'Confirm Logout';
+
+  const body = document.createElement('p');
+  body.className = 'modal-body';
+  body.textContent = 'Are you sure you want to log out?';
+
+  const actions = document.createElement('div');
+  actions.className = 'modal-actions';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn-secondary';
+  cancelBtn.textContent = 'Cancel';
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.className = 'btn-danger';
+  confirmBtn.textContent = 'Logout';
+
+  function closeModal() {
+    backdrop.remove();
+    document.removeEventListener('keydown', handleKey);
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Escape') closeModal();
+  }
+
+  cancelBtn.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) closeModal();
+  });
+  document.addEventListener('keydown', handleKey);
+
+  confirmBtn.addEventListener('click', () => {
+    closeModal();
+    if (typeof clearSession === 'function') {
+      clearSession({ redirect: false });
+      window.location.replace('/');
+    }
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(confirmBtn);
+  dialog.appendChild(title);
+  dialog.appendChild(body);
+  dialog.appendChild(actions);
+  backdrop.appendChild(dialog);
+  document.body.appendChild(backdrop);
+
+  cancelBtn.focus();
+}
+
+function syncNavbarAuth() {
+  const nav = document.querySelector('.site-header .nav');
+  if (!nav) return;
+
+  const existingAuthArea = nav.querySelector('#nav-auth-area');
+  if (existingAuthArea) existingAuthArea.remove();
+
+  // Find standard login/register links if present
+  const loginLink = nav.querySelector('a[href="/login.html"]');
+  const registerLink = nav.querySelector('a[href="/register.html"]');
+  const themeToggle = nav.querySelector('#theme-toggle');
+
+  const token = typeof getToken === 'function' ? getToken() : localStorage.getItem('lt_token');
+  const user = typeof getStoredUser === 'function' ? getStoredUser() : null;
+
+  if (token && user) {
+    if (loginLink) loginLink.style.display = 'none';
+    if (registerLink) registerLink.style.display = 'none';
+
+    const authContainer = document.createElement('div');
+    authContainer.id = 'nav-auth-area';
+    authContainer.className = 'nav-auth-group';
+
+    const userBadge = document.createElement('span');
+    userBadge.className = 'user-badge';
+    userBadge.textContent = user.full_name || user.email;
+    if (user.role && user.role !== 'CUSTOMER') {
+      const rolePill = document.createElement('span');
+      rolePill.className = 'role-pill';
+      rolePill.textContent = user.role.replace('_', ' ');
+      userBadge.appendChild(rolePill);
+    }
+
+    const logoutBtn = document.createElement('button');
+    logoutBtn.type = 'button';
+    logoutBtn.className = 'btn-logout';
+    logoutBtn.textContent = 'Logout';
+    logoutBtn.addEventListener('click', () => {
+      showLogoutConfirmation();
+    });
+
+    authContainer.appendChild(userBadge);
+    authContainer.appendChild(logoutBtn);
+
+    if (themeToggle) {
+      nav.insertBefore(authContainer, themeToggle);
+    } else {
+      nav.appendChild(authContainer);
+    }
+  } else {
+    if (loginLink) loginLink.style.display = '';
+    if (registerLink) registerLink.style.display = '';
+  }
+}
+
 // Run theme attribute immediately on script load so dark colors apply without flashing
 (function() {
   const currentTheme = getPreferredTheme();
   document.documentElement.setAttribute('data-theme', currentTheme);
 })();
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
+  syncNavbarAuth();
   preventSamePageReload();
   showHealth();
+
+  // If logged in, asynchronously refresh user data from server in background
+  if (typeof fetchCurrentUser === 'function' && getToken()) {
+    const freshUser = await fetchCurrentUser();
+    if (freshUser) {
+      syncNavbarAuth();
+    }
+  }
+});
+
+window.addEventListener('auth:change', () => {
+  syncNavbarAuth();
 });
 

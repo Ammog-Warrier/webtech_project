@@ -22,9 +22,65 @@
       <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
     </nav>
   </div></header>
-  <main class="section"><div class="container"><h2>Register</h2><p>Coming soon.</p></div></main>
+
+  <main class="section">
+    <div class="container">
+      <div class="auth-container">
+        <div class="auth-card">
+          <h2>Create Account</h2>
+          <p class="subtitle">Join Local Tourism to discover and book authentic travel experiences.</p>
+
+          <div id="auth-alert" class="auth-alert" role="alert"></div>
+
+          <form id="register-form" class="auth-form" novalidate>
+            <div class="form-group">
+              <label for="full_name">Full Name</label>
+              <input type="text" id="full_name" name="full_name" class="form-input" required maxlength="100" autocomplete="name" autofocus placeholder="Jane Doe">
+            </div>
+
+            <div class="form-group">
+              <label for="email">Email address</label>
+              <input type="email" id="email" name="email" class="form-input" required maxlength="150" autocomplete="email" placeholder="you@example.com">
+            </div>
+
+            <div class="form-group">
+              <label for="phone">Phone number <span class="muted" style="font-weight: normal; font-size: 0.85em;">(optional)</span></label>
+              <input type="tel" id="phone" name="phone" class="form-input" maxlength="20" autocomplete="tel" placeholder="+1 (555) 012-3456">
+            </div>
+
+            <div class="form-group">
+              <label for="role">Account Type</label>
+              <select id="role" name="role" class="form-select">
+                <option value="CUSTOMER" selected>Customer (Traveler / Explorer)</option>
+                <option value="PROVIDER">Provider (Guide / Experience Host)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="password">Password <span class="muted" style="font-weight: normal; font-size: 0.85em;">(8–72 characters)</span></label>
+              <input type="password" id="password" name="password" class="form-input" required minlength="8" maxlength="72" autocomplete="new-password" placeholder="••••••••">
+            </div>
+
+            <div class="form-group">
+              <label for="confirm_password">Confirm Password</label>
+              <input type="password" id="confirm_password" name="confirm_password" class="form-input" required minlength="8" maxlength="72" autocomplete="new-password" placeholder="••••••••">
+            </div>
+
+            <button type="submit" id="submit-btn" class="btn btn-primary auth-btn">Create Account</button>
+          </form>
+
+          <p class="auth-footer">
+            Already have an account? <a href="/login.html">Log in instead</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </main>
+
   <footer class="site-footer"><div class="container"><span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
   <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
   <script src="/js/main.js"></script>
+  <script src="/js/register.js"></script>
 </body>
 </html>

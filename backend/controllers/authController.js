@@ -33,4 +33,8 @@ async function login(req, res) {
   ok(res, await loginUser(email, body.password));
 }
 
-module.exports = { register, login };
+async function getMe(req, res) {
+  ok(res, req.user);
+}
+
+module.exports = { register, login, getMe };
