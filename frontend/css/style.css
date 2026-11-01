@@ -247,13 +247,43 @@ a { color: inherit; text-decoration: none; }
 .price { font-weight: 700; color: var(--c-primary); font-size: 1.1rem; margin-top: .4rem; }
 .card-body .btn { margin-top: .8rem; }
 .filter { margin-bottom: 1.5rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-.filter select {
-  padding: .5rem .8rem;
+.filter select,
+.filter input {
+  padding: .65rem .8rem;
   border-radius: 8px;
   border: 1px solid var(--c-border);
   background: var(--c-card-bg);
   color: var(--c-ink);
   font: inherit;
+  outline: none;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.filter input {
+  min-width: 180px;
+}
+
+.filter select:focus,
+.filter input:focus {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primary) 20%, transparent);
+}
+
+.filter input::placeholder {
+  color: var(--c-muted);
+  opacity: 1;
+}
+
+@media (max-width: 600px) {
+  .filter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filter select,
+  .filter input {
+    width: 100%;
+  }
 }
 
 .detail { display: grid; gap: 2rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }

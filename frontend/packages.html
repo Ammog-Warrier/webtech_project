@@ -23,7 +23,28 @@
     </nav>
   </div></header>
   <main class="section"><div class="container"><h2>Packages</h2>
-    <div class="filter"><label for="destination-filter">Destination:</label><select id="destination-filter"><option value="">All destinations</option></select></div>
+    <div class="filter">
+      <label for="destination-filter">Destination:</label>
+      <select id="destination-filter">
+        <option value="">All destinations</option>
+      </select>
+
+      <label for="package-search">Search:</label>
+      <input
+        type="search"
+        id="package-search"
+        placeholder="Search packages..."
+        aria-label="Search packages"
+      >
+
+      <label for="sort-filter">Sort by:</label>
+      <select id="sort-filter">
+        <option value="default">Recommended</option>
+        <option value="price-low">Price: Low to High</option>
+        <option value="price-high">Price: High to Low</option>
+        <option value="duration">Duration: Shortest First</option>
+      </select>
+    </div>
     <div class="grid" id="packages-grid"><p class="muted">Loading…</p></div></div></main>
   <footer class="site-footer"><div class="container"><span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
   <script src="/js/api.js"></script>
