@@ -22,11 +22,56 @@
       <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
     </nav>
   </div></header>
-  <section class="hero"><div class="container">
-    <h1>Discover your next local adventure</h1>
-    <p>Browse and book tourism packages hosted by local guides.</p>
-    <a class="btn" href="/packages.html">Explore Packages</a>
-  </div></section>
+  <section class="hero" id="public-home">
+    <div class="container">
+      <h1>Discover your next local adventure</h1>
+      <p>Browse and book tourism packages hosted by local guides.</p>
+      <a class="btn" href="/packages.html">Explore Packages</a>
+    </div>
+  </section>
+
+
+<section class="section" id="customer-dashboard" hidden>
+  <div class="container">
+
+    <div class="dashboard-welcome">
+      <h1>Welcome back, <span id="home-user-name">Traveller</span>!</h1>
+      <p class="muted">Ready to discover somewhere new?</p>
+      <p id="home-user-email" class="muted"></p>
+    </div>
+
+    <h2>Your Travel Dashboard</h2>
+    <p class="muted">Everything you need for your next adventure.</p>
+
+    <div class="grid">
+
+      <article class="card">
+        <div class="card-body">
+          <h3>My Bookings</h3>
+          <p class="muted">
+            Your booking history and upcoming trips will appear here
+            once booking functionality is connected.
+          </p>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-body">
+          <h3>Explore Destinations</h3>
+          <p>Find new places, discover local attractions and plan your next getaway.</p>
+          <a href="/destinations.html" class="btn btn-primary">Explore Destinations</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-body">
+          <h3>Browse Packages</h3>
+          <p>Explore travel packages and find experiences that match your interests.</p>
+          <a href="/packages.html" class="btn btn-primary">Browse Packages</a>
+        </div>
+      </article>
+</section>
+
   <section class="section"><div class="container">
     <h2>Featured Destinations</h2>
     <div class="grid">
@@ -39,5 +84,6 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/main.js"></script>
+  <script src="/js/home.js"></script>
 </body>
 </html>
