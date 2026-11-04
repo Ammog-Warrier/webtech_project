@@ -16,7 +16,7 @@ Each collaborator uses their own local database and `.env` (never commit `.env`)
 4. Load the seed data: run `database/seed.sql` (safe to re-run; it won't duplicate rows).
 5. `npm start` should print "Database connected"; `/api/health` should report `"database":"connected"`.
 
-**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Run each migration once, in order (e.g. `mysql -u tourism_user -p local_tourism < database/migrations/003_user_status.sql`). 001, 005, 006, 007 and 008 are safe to re-run; 002, 003 and 004 are not (they use `ALTER TABLE`).
+**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Run each migration once, in order (e.g. `mysql -u tourism_user -p local_tourism < database/migrations/009_categories_and_admin_permissions.sql`). 001, 005, 006, 007, 008 and 009 are safe to re-run; 002, 003 and 004 are not (they use `ALTER TABLE`).
 
 **Demo accounts (development only, created by `seed.sql`):** `customer@`, `provider@`, `admin@`, `superadmin@example.com`, all with password `Demo@1234`. Never use these outside local development.
 
@@ -57,13 +57,17 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 |---|---|
 | roles | CUSTOMER, PROVIDER, ADMIN, SUPER_ADMIN (seeded) |
 | users | `role_id` FK to roles; `password_hash` (bcryptjs); `phone` (optional); `is_active` (0 = account disabled); `provider_status` NOT_APPLICABLE / PENDING / APPROVED / REJECTED (only used for PROVIDER accounts; a provider must be APPROVED before publishing packages) |
+| categories | `name` unique, `description` (seeded: Adventure, Cultural, Beach & Island, Food & Culinary, Nature & Wildlife) |
 | destinations | `name` unique, `description`, `image_url` (seeded: Mountains, Beaches, Cities) |
-| packages | `destination_id` FK, `title` unique, `price`, `duration_days`, `image_url`, `itinerary` and `inclusions` (text, one item per line), `max_group_size` (6 seeded), `provider_id` FK to users (owner), `status` PENDING / APPROVED / REJECTED / ARCHIVED (only APPROVED packages are public) |
+| packages | `destination_id` FK, `category_id` FK to categories (optional), `title` unique, `price`, `duration_days`, `image_url`, `itinerary` and `inclusions` (text, one item per line), `max_group_size` (6 seeded), `provider_id` FK to users (owner), `status` PENDING / APPROVED / REJECTED / ARCHIVED (only APPROVED packages are public) |
 | package_departures | Bookable dates: `package_id` FK, `start_date`, `seats_total`; unique per (package, date). Seeded: two per package (30 and 60 days after seeding) |
 | bookings | `customer_id` FK to users, `departure_id` FK, `num_guests`, `total_price` (snapshot of price x guests), `status` PENDING / CONFIRMED / CANCELLED / COMPLETED |
 | payments | **Simulated** (no real gateway): `booking_id` FK (unique, one per booking), `amount`, `method` CARD / UPI / NET_BANKING, `status` PAID / REFUNDED, `paid_at` |
 | reviews | `booking_id` FK (unique, one review per booking), `rating` 1-5 (CHECK), `comment` |
-| audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at` |
+| audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at`. *Note on specification alignment:* corresponds to `system_logs` in the project spec; standardizes column names with our entity foreign key pattern. |
+| admin_permissions | Super admin granular permission assignments for admins: `admin_id` FK to users, `permission`, `created_at` |
+| settings | Extensible key-value store for application/system settings: `setting_key` PK, `setting_value`, `description`, `updated_at` |
+| addresses | User address records: `user_id` FK to users, `street`, `city`, `state`, `postal_code`, `country`, `created_at` |
 
 ### Authentication
 Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client sends it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`. `backend/middleware/auth.js` provides `requireAuth(handler)` and `requireRole(allowedRoles, handler)`.
@@ -125,6 +129,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+- 2026-11-04: Schema migration 009 added: categories, admin_permissions, settings, and addresses tables, plus category_id FK on packages. Seed data expanded with default categories and system settings. DEVELOPER.md updated.
 - 2026-10-28: Auth UX refinements: added logout confirmation modal, fixed bfcache back-navigation redirection on login and register pages (pageshow and window.location.replace), and updated registration progress status indicators.
 - 2026-10-28: Auth middleware (`requireAuth`, `requireRole`) in `backend/middleware/auth.js`, `GET /api/auth/me` endpoint, wired `login.html` and `register.html` with client validation, token storage, and dynamic navbar state with role-based redirection.
 - 2026-10-28: Auth endpoints `POST /api/auth/register` and `POST /api/auth/login` (signed tokens, new `AUTH_SECRET` env variable).
@@ -133,4 +138,3 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 - 2026-10-18: Package detail page (migration 002, `GET /api/packages/:id`, path-parameter routing, `package.html`).
 - 2026-10-17: Destinations and packages (tables, migration 001, seed, list endpoints, pages, local images).
 - 2026-10-17: Initial foundation (server, static serving, health endpoint, DB pool, roles/users schema).
-

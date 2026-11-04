@@ -1,6 +1,20 @@
 USE local_tourism;
 INSERT IGNORE INTO roles (name) VALUES ('CUSTOMER'), ('PROVIDER'), ('ADMIN'), ('SUPER_ADMIN');
 
+-- Categories: 009
+INSERT IGNORE INTO categories (name, description) VALUES
+  ('Adventure', 'Trekking, hiking, outdoor expeditions and high-energy thrills.'),
+  ('Cultural', 'Heritage sites, traditional architecture, festivals and local history.'),
+  ('Beach & Island', 'Coastal getaways, island hopping, watersports and sunset cruises.'),
+  ('Food & Culinary', 'Local street food tours, cooking workshops and farm-to-table experiences.'),
+  ('Nature & Wildlife', 'Flora, fauna, nature reserves and eco-tourism trails.');
+
+-- System settings: 009
+INSERT INTO settings (setting_key, setting_value, description) VALUES
+  ('maintenance_mode', 'false', 'Enable or disable maintenance mode for public routes'),
+  ('booking_cancellation_hours_limit', '24', 'Minimum hours prior to departure permitted for booking cancellations')
+ON DUPLICATE KEY UPDATE description = VALUES(description);
+
 INSERT IGNORE INTO destinations (name, description, image_url) VALUES
   ('Mountains', 'Alpine trails, scenic viewpoints and village stays.', '/assets/img/mountains.jpg'),
   ('Beaches', 'Sun, sand and fresh seafood along the coast.', '/assets/img/beaches.jpg'),
@@ -15,6 +29,19 @@ SELECT d.id, p.title, p.description, p.price, p.days, p.img FROM (
   UNION ALL SELECT 'Cities', 'Old Town Food Walk', 'Taste the best local street food.', 35.00, 1, '/assets/img/cities.jpg'
   UNION ALL SELECT 'Cities', 'Heritage City Break', 'Museums, markets and local guides.', 150.00, 2, '/assets/img/cities.jpg'
 ) p JOIN destinations d ON d.name = p.dest;
+
+-- Assign categories to seeded packages
+UPDATE packages SET category_id = (SELECT id FROM categories WHERE name = 'Adventure')
+WHERE title IN ('Highland Trek Weekend', 'Sunrise Peak Hike');
+
+UPDATE packages SET category_id = (SELECT id FROM categories WHERE name = 'Beach & Island')
+WHERE title IN ('Coastal Escape', 'Island Snorkel Day');
+
+UPDATE packages SET category_id = (SELECT id FROM categories WHERE name = 'Food & Culinary')
+WHERE title = 'Old Town Food Walk';
+
+UPDATE packages SET category_id = (SELECT id FROM categories WHERE name = 'Cultural')
+WHERE title = 'Heritage City Break';
 
 -- Package details (itinerary / inclusions: one item per line). Safe to re-run.
 UPDATE packages SET max_group_size = 10,
