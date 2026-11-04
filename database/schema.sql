@@ -1,7 +1,7 @@
 CREATE DATABASE IF NOT EXISTS local_tourism CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE local_tourism;
 
--- Full schema (migrations 001-009 applied). Extend via database/migrations/ as features are built.
+-- Full schema (migrations 001-010 applied). Extend via database/migrations/ as features are built.
 CREATE TABLE IF NOT EXISTS roles (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(30) NOT NULL UNIQUE
@@ -147,6 +147,6 @@ CREATE TABLE IF NOT EXISTS addresses (
   postal_code VARCHAR(20) NOT NULL,
   country VARCHAR(100) NOT NULL DEFAULT 'India',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_addresses_user (user_id),
+  UNIQUE KEY uq_addresses_user (user_id),
   CONSTRAINT fk_addresses_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

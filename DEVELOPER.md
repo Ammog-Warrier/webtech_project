@@ -16,7 +16,7 @@ Each collaborator uses their own local database and `.env` (never commit `.env`)
 4. Load the seed data: run `database/seed.sql` (safe to re-run; it won't duplicate rows).
 5. `npm start` should print "Database connected"; `/api/health` should report `"database":"connected"`.
 
-**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Run each migration once, in order (e.g. `mysql -u tourism_user -p local_tourism < database/migrations/009_categories_and_admin_permissions.sql`). 001, 005, 006, 007, 008 and 009 are safe to re-run; 002, 003 and 004 are not (they use `ALTER TABLE`).
+**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Run each migration once, in order (e.g. `mysql -u tourism_user -p local_tourism < database/migrations/010_address_user_unique.sql`). 001, 005, 006, 007, 008, 009 and 010 are safe to re-run; 002, 003 and 004 are not (they use `ALTER TABLE`).
 
 **Demo accounts (development only, created by `seed.sql`):** `customer@`, `provider@`, `admin@`, `superadmin@example.com`, all with password `Demo@1234`. Never use these outside local development.
 
@@ -48,9 +48,17 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
 | GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
 | GET | /api/packages/:id | Public | One package with detail fields (`itinerary` and `inclusions` as arrays, `max_group_size`); 400 if id is not an integer, 404 if missing |
+| GET | /api/packages/:id/departures | Public | Available departures for an approved package starting from today with live calculated remaining seats (`seats_available`) |
 | POST | /api/auth/register | Public | Create an account. Body: `full_name`, `email`, `password` (8-72 chars), optional `phone`, optional `role` (`CUSTOMER` default, or `PROVIDER`; providers start with `provider_status` PENDING). Returns the user (201). 400 invalid input, 409 email already registered. Admin accounts cannot be self-registered |
 | POST | /api/auth/login | Public | Body: `email`, `password`. Returns `{ token, user }`. 400 missing fields, 401 wrong email or password (same message for both), 403 account disabled |
 | GET | /api/auth/me | Bearer token | Return currently authenticated user (`id, full_name, email, phone, role, provider_status`). 401 unauthenticated, 403 account disabled |
+| GET | /api/users/profile | Bearer token | Return user profile with attached address (`id, full_name, email, phone, role, provider_status, address`). 401 unauthenticated |
+| PUT | /api/users/profile | Bearer token | Update user profile name, phone, and upsert primary address. Body: `full_name`, optional `phone`, optional `address` (`street, city, state, postal_code, country`). 400 invalid input |
+| POST | /api/bookings | CUSTOMER | Create booking reserving seats. Body: `departure_id`, `num_guests`. Locks departure row, verifies seat availability against PENDING/CONFIRMED reservations, computes total_price snapshot, returns booking in PENDING status (201) |
+| GET | /api/bookings/my | CUSTOMER | Return all bookings for the logged-in customer with departure date, destination, payment status, and review status |
+| POST | /api/bookings/:id/pay | CUSTOMER | Simulate payment for a PENDING booking. Body: `method` (`CARD`, `UPI`, `NET_BANKING`). Locks booking, records payment (PAID), transitions booking to CONFIRMED atomically |
+| POST | /api/bookings/:id/cancel | CUSTOMER | Cancel customer booking. Checks cancellation cutoff against `booking_cancellation_hours_limit` setting. If CONFIRMED, marks payment as REFUNDED atomically |
+| POST | /api/bookings/:id/review | CUSTOMER | Submit review for customer's own COMPLETED booking. Body: `rating` (1-5), optional `comment`. 400 if trip not completed, 409 if already reviewed |
 
 ## Database tables
 | Table | Notes |
@@ -67,26 +75,28 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at`. *Note on specification alignment:* corresponds to `system_logs` in the project spec; standardizes column names with our entity foreign key pattern. |
 | admin_permissions | Super admin granular permission assignments for admins: `admin_id` FK to users, `permission`, `created_at` |
 | settings | Extensible key-value store for application/system settings: `setting_key` PK, `setting_value`, `description`, `updated_at` |
-| addresses | User address records: `user_id` FK to users, `street`, `city`, `state`, `postal_code`, `country`, `created_at` |
+| addresses | User address records: `user_id` FK to users (unique), `street`, `city`, `state`, `postal_code`, `country`, `created_at` |
 
 ### Authentication
 Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client sends it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`. `backend/middleware/auth.js` provides `requireAuth(handler)` and `requireRole(allowedRoles, handler)`.
 
-Tables for bookings, payments, reviews and audit logs exist, but no API or UI uses them yet.
-
 ### Business rules (enforced in services, not just the UI)
 - **Seats left** for a departure = `seats_total` minus the `num_guests` of its PENDING and CONFIRMED bookings. A booking must not exceed it.
-- **Booking lifecycle:** PENDING (created) -> CONFIRMED (payment made) -> COMPLETED (after the start date). CANCELLED is allowed from PENDING or CONFIRMED (a CONFIRMED cancel marks the payment REFUNDED).
-- **Payment (simulated):** the customer selects a method and presses Pay; the server records a PAID payment and confirms the booking in one transaction. No card details are collected or stored.
-- **Reviews:** only for the customer's own COMPLETED booking, once per booking.
+- **Concurrency & Pessimistic Locking:** Booking creation locks the `package_departures` row using `SELECT ... FOR UPDATE` before re-evaluating seat availability and writing the booking row inside the same transaction.
+- **Booking lifecycle:** PENDING (created) -> CONFIRMED (payment made) -> COMPLETED (after departure date + duration_days). CANCELLED is allowed from PENDING or CONFIRMED (a CONFIRMED cancel marks the payment REFUNDED in a single transaction).
+- **Cancellation cutoff:** Bookings can only be cancelled prior to departure date minus the hours limit configured in `settings` (`booking_cancellation_hours_limit`, default 24h).
+- **Payment (simulated):** the customer selects a method and presses Pay; the server locks the booking, inserts a PAID payment, and confirms the booking in one transaction. Duplicate payments for the same booking are rejected. No card details are collected or stored.
+- **Reviews:** only for the customer's own COMPLETED booking (or confirmed where trip end date has passed), once per booking. Verified independently inside `createReview()`.
+- **Address management:** each user has one address in `addresses` with a UNIQUE constraint on `user_id`, upserted via `INSERT ... ON DUPLICATE KEY UPDATE`.
 - **Provider approval:** new providers start PENDING; an admin approves/rejects. New packages start PENDING; an admin approves/rejects them.
 - **Audit logging:** admin and super admin actions (approvals, user changes) write a row to `audit_logs`.
 
 ### Roles and permissions (enforced by backend middleware)
 | Action | Customer | Provider | Admin | Super Admin |
 |---|---|---|---|---|
-| Browse approved packages | yes | yes | yes | yes |
+| Browse approved packages & departures | yes | yes | yes | yes |
 | Book, pay, cancel own booking, review | yes | | | |
+| View & update personal profile/address | yes | yes | yes | yes |
 | Create/edit own packages and departures | | approved providers | | |
 | View bookings of own packages | | yes | | |
 | Approve/reject providers and packages | | | yes | yes |
@@ -107,11 +117,14 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 | index | Landing page (static content) |
 | destinations | Working: lists destinations from the API, links to filtered packages |
 | packages | Working: lists packages, filter by destination, links to the detail page |
-| package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size) |
+| package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size, upcoming departures with live seat count, direct Book Date button) |
+| booking | Working: `booking.html?package_id=<id>&departure_id=<id>` customer booking form with dynamic departure selection, guest count slider/input, live price breakdown, and seat availability validation |
+| my-bookings | Working: customer booking dashboard showing active/past bookings, status badges, simulated payment modal, cancellation with refund modal, and review submission modal |
+| profile | Working: view & edit customer contact info, phone, and postal address with upsert functionality |
 | login | Working: token authentication, error alerts, redirect by role |
 | register | Working: customer/provider sign-up, validation, auto-login & redirect |
 
-Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/auth.js` (token & session helpers), `js/render.js` (safe DOM builders), `js/main.js` (health check, dark/light mode toggle, dynamic navbar auth state). Images live in `frontend/assets/img/` (served locally; no hotlinking).
+Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/auth.js` (token & session helpers, role dashboard routing), `js/render.js` (safe DOM builders), `js/main.js` (health check, dark/light mode toggle, dynamic navbar auth state with role badges and Customer navigation links). Images live in `frontend/assets/img/` (served locally; no hotlinking).
 
 ## Conventions
 **Technology (strict):** only HTML5, CSS3, vanilla JS, Node built-ins (`http`), MySQL/MariaDB with `mysql2`, plus `dotenv`, `bcryptjs`, `nodemon` (dev). No frameworks (Express, React, Vue, Angular, Next.js, Bootstrap, Tailwind) and no ORMs. Ask the team before adding any dependency.
@@ -122,13 +135,14 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 **Database:** plural snake_case tables, snake_case columns, PK `id`, FKs named `<entity>_id` with constraints. Parameterized queries only (`pool.execute(sql, [params])`).
 
-**API:** use `ok()` / `fail()` from `backend/utils/response.js`. Status codes: 200/201 success, 400 validation, 401 unauthenticated, 403 forbidden, 404 not found, 500 server error. Routes under `/api`, plural nouns.
+**API:** use `ok()` / `fail()` from `backend/utils/response.js`. Status codes: 200/201 success, 400 validation, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict, 500 server error. Routes under `/api`, plural nouns.
 
 **Security:** no credentials in code, `.env` stays untracked, hash passwords with bcryptjs and never return hashes, validate input server-side, enforce roles in the backend, use `textContent` (not `innerHTML`) for user content, app connects with the limited DB user (never root).
 
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+- 2026-11-04: Step 2 Customer Booking Flow: implemented departure availability API, concurrent booking creation with pessimistic row locking (`FOR UPDATE`), duplicate payment prevention with single-transaction confirmation, cancellation with eligibility rules and automated refunds, review submission for completed bookings, and user profile with address upsert. Added frontend pages: `booking.html`, `my-bookings.html`, `profile.html`, updated `package.html` and navbar auth routing. Added migration `010_address_user_unique.sql`.
 - 2026-11-04: Schema migration 009 added: categories, admin_permissions, settings, and addresses tables, plus category_id FK on packages. Seed data expanded with default categories and system settings. DEVELOPER.md updated.
 - 2026-10-28: Auth UX refinements: added logout confirmation modal, fixed bfcache back-navigation redirection on login and register pages (pageshow and window.location.replace), and updated registration progress status indicators.
 - 2026-10-28: Auth middleware (`requireAuth`, `requireRole`) in `backend/middleware/auth.js`, `GET /api/auth/me` endpoint, wired `login.html` and `register.html` with client validation, token storage, and dynamic navbar state with role-based redirection.

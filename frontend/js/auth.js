@@ -47,7 +47,7 @@ async function fetchCurrentUser() {
 function getRoleDashboardUrl(role) {
   switch (role) {
     case 'CUSTOMER':
-      return '/';
+      return '/my-bookings.html';
     case 'PROVIDER':
       return '/packages.html';
     case 'ADMIN':

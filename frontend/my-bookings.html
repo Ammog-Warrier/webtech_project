@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Bookings · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var s = localStorage.getItem('lt_theme');
+      var t = (s === 'dark' || s === 'light') ? s : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a><a href="/destinations.html">Destinations</a><a href="/packages.html">Packages</a>
+      <a href="/login.html">Login</a><a class="btn btn-primary" href="/register.html">Register</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+      <div>
+        <h2>My Bookings</h2>
+        <p class="muted">Manage your package reservations, complete payments, and submit reviews.</p>
+      </div>
+      <a href="/packages.html" class="btn btn-secondary">+ Explore More Packages</a>
+    </div>
+
+    <div id="alert-zone"></div>
+    <div id="bookings-list">
+      <p class="muted">Loading your bookings…</p>
+    </div>
+  </div></main>
+
+  <!-- Payment Modal Container -->
+  <div id="modal-container"></div>
+
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/my-bookings.js"></script>
+</body>
+</html>
+

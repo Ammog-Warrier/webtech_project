@@ -58,6 +58,20 @@ async function showHealth() {
 }
 
 // Prevent unnecessary page reload/flash when clicking a link that leads to the current page
+function highlightActiveNavLink() {
+  const currentPath = window.location.pathname.replace(/\/index\.html$/, '/') || '/';
+  document.querySelectorAll('.nav a').forEach((link) => {
+    const href = link.getAttribute('href');
+    if (!href) return;
+    const targetPath = href.replace(/\/index\.html$/, '') || '/';
+    if (targetPath === currentPath) {
+      link.classList.add('active');
+    } else {
+      link.classList.remove('active');
+    }
+  });
+}
+
 function preventSamePageReload() {
   const currentPath = window.location.pathname.replace(/\/index\.html$/, '/') || '/';
   document.querySelectorAll('.nav a').forEach((link) => {
@@ -187,6 +201,21 @@ function syncNavbarAuth() {
     authContainer.appendChild(userBadge);
     authContainer.appendChild(logoutBtn);
 
+    if (user.role === 'CUSTOMER') {
+      const myBookingsLink = document.createElement('a');
+      myBookingsLink.href = '/my-bookings.html';
+      myBookingsLink.textContent = 'My Bookings';
+      myBookingsLink.className = 'nav-link-customer';
+
+      const profileLink = document.createElement('a');
+      profileLink.href = '/profile.html';
+      profileLink.textContent = 'Profile';
+      profileLink.className = 'nav-link-customer';
+
+      authContainer.prepend(profileLink);
+      authContainer.prepend(myBookingsLink);
+    }
+
     if (themeToggle) {
       nav.insertBefore(authContainer, themeToggle);
     } else {
@@ -207,6 +236,7 @@ function syncNavbarAuth() {
 document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   syncNavbarAuth();
+  highlightActiveNavLink();
   preventSamePageReload();
   showHealth();
 

@@ -6,10 +6,15 @@ async function apiFetch(path, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  let body = options.body;
+  if (body !== undefined && typeof body !== 'string') {
+    body = JSON.stringify(body);
+  }
+
   const res = await fetch(`/api${path}`, {
     ...options,
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body,
   });
 
   const json = await res.json();
