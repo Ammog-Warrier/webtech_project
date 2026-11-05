@@ -114,9 +114,9 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 ## Frontend pages
 | Page | Status |
 |---|---|
-| index | Landing page (static content) |
+| index | Landing page; logged-in customers also see a personalized dashboard (name and email from `/api/auth/me`, via `js/home.js`) |
 | destinations | Working: lists destinations from the API, links to filtered packages |
-| packages | Working: lists packages, filter by destination, links to the detail page |
+| packages | Working: lists packages; filter by destination, text search, min/max price, sort (price, duration), clear filters, results count (all client-side in `js/packages.js`); links to the detail page |
 | package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size, upcoming departures with live seat count, direct Book Date button) |
 | booking | Working: `booking.html?package_id=<id>&departure_id=<id>` customer booking form with dynamic departure selection, guest count slider/input, live price breakdown, and seat availability validation |
 | my-bookings | Working: customer booking dashboard showing active/past bookings, status badges, simulated payment modal, cancellation with refund modal, and review submission modal |
@@ -142,8 +142,14 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+
 - 2026-11-04: Step 2 Customer Booking Flow: implemented departure availability API, concurrent booking creation with pessimistic row locking (`FOR UPDATE`), duplicate payment prevention with single-transaction confirmation, cancellation with eligibility rules and automated refunds, review submission for completed bookings, and user profile with address upsert. Added frontend pages: `booking.html`, `my-bookings.html`, `profile.html`, updated `package.html` and navbar auth routing. Added migration `010_address_user_unique.sql`.
+
 - 2026-11-04: Schema migration 009 added: categories, admin_permissions, settings, and addresses tables, plus category_id FK on packages. Seed data expanded with default categories and system settings. DEVELOPER.md updated.
+
+- 2026-11-01: Packages page search, sorting and price/destination filtering (client-side); personalized customer dashboard on the home page (`home.js`); customers now redirect to `/` after login.
+
+- 2026-10-28: Auth UX refinements: added logout confirmation modal, fixed bfcache back-navigation redirection on login and register pages (pageshow and window.location.replace), and updated registration progress status indicators.
 - 2026-10-28: Auth UX refinements: added logout confirmation modal, fixed bfcache back-navigation redirection on login and register pages (pageshow and window.location.replace), and updated registration progress status indicators.
 - 2026-10-28: Auth middleware (`requireAuth`, `requireRole`) in `backend/middleware/auth.js`, `GET /api/auth/me` endpoint, wired `login.html` and `register.html` with client validation, token storage, and dynamic navbar state with role-based redirection.
 - 2026-10-28: Auth endpoints `POST /api/auth/register` and `POST /api/auth/login` (signed tokens, new `AUTH_SECRET` env variable).
