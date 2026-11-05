@@ -1,8 +1,10 @@
+
 const { getHealth } = require('../controllers/healthController');
 const { getDestinations } = require('../controllers/destinationController');
 const { getPackages, getPackage } = require('../controllers/packageController');
 const { getPackageDepartures } = require('../controllers/departureController');
 const { register, login, getMe } = require('../controllers/authController');
+
 const {
   createNewBooking,
   getMyBookings,
@@ -10,18 +12,22 @@ const {
   payForBooking,
   reviewMyBooking,
 } = require('../controllers/bookingController');
+
 const { getProfile, updateProfile } = require('../controllers/userController');
 const { getDashboard: getProviderDashboard } = require('../controllers/providerController');
+
 const {
   requireAuth,
   requireRole,
   requireApprovedProvider,
 } = require('../middleware/auth');
+
 const {
   getMyBookings: getProviderBookings,
   getBookingDetails: getProviderBookingDetails,
   confirmBooking: confirmProviderBooking,
 } = require('../controllers/providerBookingController');
+
 const {
   getMyDepartures,
   getDeparturePackages,
@@ -29,6 +35,7 @@ const {
   updateDeparture,
   deleteDeparture,
 } = require('../controllers/providerDepartureController');
+
 const {
   getMyPackages,
   getPackageFormOptions,
@@ -36,6 +43,11 @@ const {
   updatePackage,
   deletePackage,
 } = require('../controllers/providerPackageController');
+
+const {
+  getMyFinance,
+  getMyReviews,
+} = require('../controllers/providerFinanceController');
 
 // Route table: 'METHOD /path' -> async handler(req, res)
 const routes = {
@@ -48,28 +60,38 @@ const routes = {
   'POST /api/auth/register': register,
   'POST /api/auth/login': login,
 
-  // Authenticated (any active user)
+  // Authenticated users
   'GET /api/auth/me': requireAuth(getMe),
   'GET /api/users/profile': requireAuth(getProfile),
   'PUT /api/users/profile': requireAuth(updateProfile),
 
-  // Provider role only (dashboard is available before approval so providers can see their status)
+  // Provider dashboard
   'GET /api/provider/dashboard': requireRole('PROVIDER', getProviderDashboard),
+
+  // Provider package management
   'GET /api/provider/package-options': requireApprovedProvider(getPackageFormOptions),
   'GET /api/provider/packages': requireApprovedProvider(getMyPackages),
   'POST /api/provider/packages': requireApprovedProvider(createPackage),
   'PUT /api/provider/packages/:id': requireApprovedProvider(updatePackage),
   'DELETE /api/provider/packages/:id': requireApprovedProvider(deletePackage),
+
+  // Provider departure management
   'GET /api/provider/departure-packages': requireApprovedProvider(getDeparturePackages),
   'GET /api/provider/departures': requireApprovedProvider(getMyDepartures),
   'POST /api/provider/departures': requireApprovedProvider(createDeparture),
   'PUT /api/provider/departures/:id': requireApprovedProvider(updateDeparture),
   'DELETE /api/provider/departures/:id': requireApprovedProvider(deleteDeparture),
+
+  // Provider booking management
   'GET /api/provider/bookings': requireApprovedProvider(getProviderBookings),
   'GET /api/provider/bookings/:id': requireApprovedProvider(getProviderBookingDetails),
   'POST /api/provider/bookings/:id/confirm': requireApprovedProvider(confirmProviderBooking),
 
-  // Customer role only
+  // Provider earnings and reviews
+  'GET /api/provider/finance': requireApprovedProvider(getMyFinance),
+  'GET /api/provider/reviews': requireApprovedProvider(getMyReviews),
+
+  // Customer booking management
   'POST /api/bookings': requireRole('CUSTOMER', createNewBooking),
   'GET /api/bookings/my': requireRole('CUSTOMER', getMyBookings),
   'POST /api/bookings/:id/cancel': requireRole('CUSTOMER', cancelMyBooking),
