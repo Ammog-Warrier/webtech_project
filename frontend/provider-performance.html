@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Earnings & Reviews · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a><a href="/destinations.html">Destinations</a><a href="/packages.html">Packages</a>
+      <a href="/provider-dashboard.html">Provider Dashboard</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container">
+    <div class="provider-dashboard-heading">
+      <div><p class="eyebrow">PROVIDER PORTAL</p><h1>Earnings & reviews</h1>
+        <p class="muted">Track payments, package revenue and customer feedback.</p></div>
+      <a class="btn btn-secondary" href="/provider-dashboard.html">Back to dashboard</a>
+    </div>
+    <p id="performance-message" class="auth-alert" role="status" aria-live="polite"></p>
+
+    <section aria-labelledby="earnings-title">
+      <h2 id="earnings-title">Earnings overview</h2>
+      <div class="provider-stat-grid">
+        <article class="provider-stat-card"><span>Paid payments</span><strong id="finance-paid">—</strong></article>
+        <article class="provider-stat-card"><span>Refunded</span><strong id="finance-refunded">—</strong></article>
+        <article class="provider-stat-card"><span>Net collected</span><strong id="finance-net">—</strong></article>
+        <article class="provider-stat-card"><span>Unpaid pending bookings</span><strong id="finance-unpaid">—</strong><small id="finance-unpaid-value" class="muted"></small></article>
+      </div>
+      <p class="muted">Figures reflect payment records in this system. Net collected is paid payments minus refunded payments; this is not a payout or profit statement.</p>
+    </section>
+
+    <section aria-labelledby="package-revenue-title">
+      <h2 id="package-revenue-title">Revenue by package</h2>
+      <div id="package-revenue-list" class="provider-list"><p class="muted">Loading package revenue…</p></div>
+    </section>
+
+    <section aria-labelledby="recent-payments-title">
+      <h2 id="recent-payments-title">Recent payments</h2>
+      <div id="recent-payment-list" class="provider-list"><p class="muted">Loading payments…</p></div>
+    </section>
+
+    <section aria-labelledby="reviews-title">
+      <h2 id="reviews-title">Customer reviews</h2>
+      <div class="provider-stat-grid provider-stat-grid-small">
+        <article class="provider-stat-card"><span>Average rating</span><strong id="reviews-average">—</strong></article>
+        <article class="provider-stat-card"><span>Total reviews</span><strong id="reviews-count">—</strong></article>
+      </div>
+      <div id="provider-review-list" class="provider-list"><p class="muted">Loading reviews…</p></div>
+    </section>
+  </div></main>
+
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+  <script src="/js/api.js"></script><script src="/js/auth.js"></script><script src="/js/main.js"></script>
+  <script src="/js/provider-performance.js"></script>
+</body>
+</html>
