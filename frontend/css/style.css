@@ -964,5 +964,6 @@ a.admin-shortcut-card:hover { transform: translateY(-2px); border-color: var(--c
 .admin-account-status { display:inline-block; padding:.25rem .55rem; border-radius:999px; font-size:.82rem; font-weight:700; }
 .admin-account-status.is-active { color:#16794b; background:rgba(22,121,75,.12); }
 .admin-account-status.is-blocked { color:#b42318; background:rgba(180,35,24,.12); }
+.admin-account-status.is-pending { color:#b7791f; background:rgba(217,119,6,.12); }
 .admin-customer-details { padding:1.2rem; border:1px solid var(--c-border); border-radius:var(--radius); background:var(--c-card-bg); }
 .admin-customer-details p { margin:.45rem 0; }

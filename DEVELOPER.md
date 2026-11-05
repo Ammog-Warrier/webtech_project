@@ -45,6 +45,11 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | /api/health | Public | Server and database status |
+| GET | /api/admin/customers, /api/admin/customers/:id; PATCH /api/admin/customers/:id/status | ADMIN, SUPER_ADMIN | Customer management (see "Admin customer management") |
+| GET | /api/admin/providers, /api/admin/providers/:id; PATCH /api/admin/providers/:id/status | ADMIN, SUPER_ADMIN | Provider management (see "Admin provider management") |
+| GET/POST/PUT/DELETE | /api/admin/destinations[/:id] | ADMIN, SUPER_ADMIN | Destination management (see section below) |
+| GET/POST/PUT/DELETE | /api/admin/categories[/:id] | ADMIN, SUPER_ADMIN | Category management (see section below) |
+| GET | /api/provider/* | PROVIDER | Provider portal endpoints (see "Provider portal endpoints") |
 | GET | /api/admin/dashboard | ADMIN, SUPER_ADMIN | Platform-wide customer, provider, package, destination, category, booking and payment summary; includes today's registrations and bookings |
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
 | GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
@@ -76,7 +81,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at`. *Note on specification alignment:* corresponds to `system_logs` in the project spec; standardizes column names with our entity foreign key pattern. |
 | admin_permissions | Super admin granular permission assignments for admins: `admin_id` FK to users, `permission`, `created_at` |
 | settings | Extensible key-value store for application/system settings: `setting_key` PK, `setting_value`, `description`, `updated_at` |
-| addresses | User address records: `user_id` FK to users (unique), `street`, `city`, `state`, `postal_code`, `country`, `created_at` |
+| addresses | User address records: `user_id` FK to users (unique, enforced by migration 010), `street`, `city`, `state`, `postal_code`, `country`, `created_at` |
 
 ### Authentication
 Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client sends it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`. `backend/middleware/auth.js` provides `requireAuth(handler)` and `requireRole(allowedRoles, handler)`.
@@ -126,6 +131,8 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 | login | Working: token authentication, error alerts, redirect by role |
 | provider-dashboard | Working: provider approval status and package/booking/performance summary |
 | provider-packages | Working: approved providers can list, create, edit and archive their own packages |
+| admin-customers / admin-providers / admin-destinations / admin-categories | Working: admin management pages (search, status filters, create/edit/delete where allowed) |
+| provider-departures / provider-bookings / provider-performance / provider-reports | Working: provider departure CRUD, owned bookings, earnings and reviews, business reports |
 | register | Working: customer/provider sign-up, validation, auto-login & redirect |
 
 Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/auth.js` (token & session helpers, role dashboard routing), `js/render.js` (safe DOM builders), `js/main.js` (health check, dark/light mode toggle, dynamic navbar auth state with role badges and Customer navigation links). Images live in `frontend/assets/img/` (served locally; no hotlinking).
@@ -147,6 +154,8 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Documentation sync: documented provider portal endpoints, admin management endpoints and pages, rewrote the Step 4.5 category section, and recorded migration 010 (unique `addresses.user_id`).
+
 - 2026-11-05: Step 4.1 Admin Dashboard: added an admin-only platform summary API and dashboard page for account, catalogue, booking and payment metrics; ADMIN and SUPER_ADMIN login redirects now lead to the admin dashboard.
 
 - 2026-11-04: Step 2 Customer Booking Flow: implemented departure availability API, concurrent booking creation with pessimistic row locking (`FOR UPDATE`), duplicate payment prevention with single-transaction confirmation, cancellation with eligibility rules and automated refunds, review submission for completed bookings, and user profile with address upsert. Added frontend pages: `booking.html`, `my-bookings.html`, `profile.html`, updated `package.html` and navbar auth routing. Added migration `010_address_user_unique.sql`.
@@ -156,7 +165,6 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 - 2026-11-01: Packages page search, sorting and price/destination filtering (client-side); personalized customer dashboard on the home page (`home.js`); customers now redirect to `/` after login.
 
 - 2026-10-28: Auth UX refinements: added logout confirmation modal, fixed bfcache back-navigation redirection on login and register pages (pageshow and window.location.replace), and updated registration progress status indicators.
-- 2026-10-28: Auth UX refinements: added logout confirmation modal, fixed bfcache back-navigation redirection on login and register pages (pageshow and window.location.replace), and updated registration progress status indicators.
 - 2026-10-28: Auth middleware (`requireAuth`, `requireRole`) in `backend/middleware/auth.js`, `GET /api/auth/me` endpoint, wired `login.html` and `register.html` with client validation, token storage, and dynamic navbar state with role-based redirection.
 - 2026-10-28: Auth endpoints `POST /api/auth/register` and `POST /api/auth/login` (signed tokens, new `AUTH_SECRET` env variable).
 - 2026-10-27: Full database schema: migrations 003-008 (user status and provider approval, package ownership and moderation, departures, bookings, simulated payments, reviews, audit logs); demo accounts and departures in the seed; public package endpoints now return APPROVED packages only.
@@ -165,6 +173,27 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 - 2026-10-17: Destinations and packages (tables, migration 001, seed, list endpoints, pages, local images).
 - 2026-10-17: Initial foundation (server, static serving, health endpoint, DB pool, roles/users schema).
 
+
+## Provider portal endpoints (Step 3)
+
+All require an APPROVED provider (`requireApprovedProvider`) except the dashboard, which requires the PROVIDER role. Records are always scoped by `packages.provider_id = authenticated user id`.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | /api/provider/dashboard | Approval status plus package, booking, revenue, review and departure counts |
+| GET | /api/provider/package-options | Destinations and categories for the package form |
+| GET | /api/provider/packages | List own packages |
+| POST | /api/provider/packages | Create a package (starts PENDING for admin moderation) |
+| PUT | /api/provider/packages/:id | Edit an own package |
+| DELETE | /api/provider/packages/:id | Archive an own package (sets status `ARCHIVED`) |
+| GET | /api/provider/finance | Earnings: paid and refunded payment totals for own packages |
+| GET | /api/provider/reviews | Reviews of own packages |
+| GET | /api/provider/reports?from=&to= | Business report: booking counts by status, payment totals, per-package breakdown for an optional date range |
+
+Departure and booking endpoints are described in their own sections below.
+
+Provider frontend pages: `provider-dashboard`, `provider-packages`, `provider-departures`, `provider-bookings`, `provider-performance` (earnings/reviews), `provider-reports`.
+Admin frontend pages: `admin-dashboard`, `admin-customers`, `admin-providers`, `admin-destinations`, `admin-categories`.
 
 ## Provider departure management
 
@@ -216,15 +245,16 @@ Admin and Super Admin endpoints:
 - `PUT /api/admin/destinations/:id` updates those fields.
 - `DELETE /api/admin/destinations/:id` deletes a destination only when no packages reference it.
 
-# Step 4.5 — Category Management
-
-## Files to add
-Copy the files in `backend/` and `frontend/` into the matching project folders.
-
-## Routes
-1. Open `backend/routes/index.js`.
-2. Add `snippets/routes-import.js` with the other controller imports.
-3. Add `snippets/routes-entries.js` inside the existing `routes` object, near the other admin routes. Keep commas between entries.
-4. Do not replace the whole route file.
-
 Destination names are unique. Duplicate names return HTTP 409. A destination linked to packages cannot be deleted and returns HTTP 409. All SQL uses parameterized values. No schema migration is required.
+
+## Admin category management (Step 4.5)
+
+Admin and Super Admin endpoints (frontend: `/admin-categories.html`):
+- `GET /api/admin/categories?search=` lists categories with package counts.
+- `GET /api/admin/categories/:id` returns one category.
+- `POST /api/admin/categories` creates a category (`name`, `description`).
+- `PUT /api/admin/categories/:id` updates it.
+- `DELETE /api/admin/categories/:id` deletes it only when no packages reference it.
+
+Duplicate category names return 409; deleting a category linked to packages returns 409. No schema migration required.
+
