@@ -69,6 +69,16 @@ const {
 // Admin reports
 const { getReport: getAdminReport } = require('../controllers/adminReportController');
 
+// Super admin: admin account management
+const {
+  getAdmins: getSuperAdminAdmins,
+  getAdminDetails: getSuperAdminAdminDetails,
+  createAdminAccount,
+  updateAdminAccount,
+  updateAdminStatus: updateSuperAdminAdminStatus,
+  deleteAdminAccount,
+} = require('../controllers/superAdminAdminController');
+
 const {
   requireAuth,
   requireRole,
@@ -245,6 +255,14 @@ const routes = {
     ['ADMIN', 'SUPER_ADMIN'],
     getAdminReport
   ),
+
+  // Super admin: admin account management
+  'GET /api/superadmin/admins': requireRole('SUPER_ADMIN', getSuperAdminAdmins),
+  'POST /api/superadmin/admins': requireRole('SUPER_ADMIN', createAdminAccount),
+  'GET /api/superadmin/admins/:id': requireRole('SUPER_ADMIN', getSuperAdminAdminDetails),
+  'PUT /api/superadmin/admins/:id': requireRole('SUPER_ADMIN', updateAdminAccount),
+  'PATCH /api/superadmin/admins/:id/status': requireRole('SUPER_ADMIN', updateSuperAdminAdminStatus),
+  'DELETE /api/superadmin/admins/:id': requireRole('SUPER_ADMIN', deleteAdminAccount),
 
   // Provider dashboard
   'GET /api/provider/dashboard': requireRole(
