@@ -28,13 +28,14 @@ function check(name, condition, extra) {
   }
 }
 
-async function api(method, path, { token, body } = {}) {
+async function api(method, path, { token, body, raw } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    // raw sends the text as is (used to test malformed JSON)
+    body: raw !== undefined ? raw : (body === undefined ? undefined : JSON.stringify(body)),
   });
   let json = null;
   try { json = await res.json(); } catch { /* non-JSON response */ }
@@ -665,7 +666,293 @@ section('Completed-trip sweep', async (t) => {
   check('admin report now counts it as completed', after - before === 1, { before, after });
 });
 
+// Registers a provider, optionally approves it, and registers cleanup. Returns { id, email, token }.
+async function makeProvider(t, { approve = true } = {}) {
+  const email = `prov.${RUN}.${Math.random().toString(36).slice(2, 6)}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Test Provider', email, password: 'Secret@123', role: 'PROVIDER' } });
+  if (reg.status !== 201) throw new Error(`Provider registration failed: ${JSON.stringify(reg.body)}`);
+  const id = reg.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM bookings WHERE departure_id IN (SELECT pd.id FROM package_departures pd JOIN packages p ON p.id = pd.package_id WHERE p.provider_id = ?)', [id]);
+    await pool.execute('DELETE FROM package_departures WHERE package_id IN (SELECT id FROM packages WHERE provider_id = ?)', [id]);
+    await pool.execute('DELETE FROM packages WHERE provider_id = ?', [id]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+  });
+  if (approve) {
+    await api('PATCH', `/api/admin/providers/${id}/status`, { token: t.admin, body: { provider_status: 'APPROVED' } });
+  }
+  return { id, email, token: await login(email, 'Secret@123') };
+}
+
+section('Provider isolation and booking rules', async (t) => {
+  const p2 = await makeProvider(t, { approve: false });
+  check('new provider starts PENDING', (await api('GET', '/api/auth/me', { token: p2.token })).data.provider_status === 'PENDING');
+  check('pending provider can open the dashboard', (await api('GET', '/api/provider/dashboard', { token: p2.token })).status === 200);
+  for (const path of ['packages', 'departures', 'bookings', 'finance', 'reviews', 'reports']) {
+    check(`pending provider: GET /${path} -> 403`, (await api('GET', `/api/provider/${path}`, { token: p2.token })).status === 403);
+  }
+  await api('PATCH', `/api/admin/providers/${p2.id}/status`, { token: t.admin, body: { provider_status: 'APPROVED' } });
+  check('approval takes effect without a new login', (await api('GET', '/api/provider/packages', { token: p2.token })).status === 200);
+
+  // A booking on provider 1's package
+  const dep = (await api('GET', '/api/packages/1/departures')).data.at(-1);
+  const seatsBefore = (await api('GET', '/api/provider/departures', { token: t.provider })).data.find((d) => d.id === dep.id).booked_seats;
+  const booking = await makeBooking(t, { pay: true, guests: 2 });
+  const seatsAfter = (await api('GET', '/api/provider/departures', { token: t.provider })).data.find((d) => d.id === dep.id);
+  check('booked seats come from real bookings (+2)', seatsAfter.booked_seats === seatsBefore + 2 && seatsAfter.seats_available === seatsAfter.seats_total - seatsAfter.booked_seats, seatsAfter);
+
+  // Provider 2 sees nothing of provider 1
+  check("provider 2's package list excludes provider 1's", !(await api('GET', '/api/provider/packages', { token: p2.token })).data.some((p) => p.id === 1));
+  check("provider 2 cannot edit provider 1's package -> 404", (await api('PUT', '/api/provider/packages/1', { token: p2.token, body: { title: 'Hijacked', description: 'x', destination_id: 1, price: 1, duration_days: 1, image_url: '/x.jpg' } })).status === 404);
+  check("provider 2 cannot archive provider 1's package -> 404", (await api('DELETE', '/api/provider/packages/1', { token: p2.token })).status === 404);
+  check("provider 1's package is untouched", (await api('GET', '/api/packages/1')).data.title === 'Highland Trek Weekend');
+  check("provider 2's departure list excludes provider 1's", !(await api('GET', '/api/provider/departures', { token: p2.token })).data.some((d) => d.id === dep.id));
+  check("provider 2 cannot edit provider 1's departure -> 404", (await api('PUT', `/api/provider/departures/${dep.id}`, { token: p2.token, body: { start_date: dep.start_date, seats_total: 99 } })).status === 404);
+  check("provider 2 cannot delete provider 1's departure -> 404", (await api('DELETE', `/api/provider/departures/${dep.id}`, { token: p2.token })).status === 404);
+  check("provider 2 cannot add a departure to provider 1's package -> 404", (await api('POST', '/api/provider/departures', { token: p2.token, body: { package_id: 1, start_date: addDays(dep.start_date, 90), seats_total: 5 } })).status === 404);
+  check("provider 2's booking list excludes provider 1's", !(await api('GET', '/api/provider/bookings', { token: p2.token })).data.some((b) => b.id === booking.id));
+  check("provider 2 cannot read provider 1's booking -> 404", (await api('GET', `/api/provider/bookings/${booking.id}`, { token: p2.token })).status === 404);
+  check("provider 2 cannot confirm provider 1's booking -> 404", (await api('POST', `/api/provider/bookings/${booking.id}/confirm`, { token: p2.token })).status === 404);
+  const fin2 = (await api('GET', '/api/provider/finance', { token: p2.token })).data;
+  const rep2 = (await api('GET', '/api/provider/reports', { token: p2.token })).data;
+  const dash2 = (await api('GET', '/api/provider/dashboard', { token: p2.token })).data;
+  check("provider 2's finance and reports are empty", fin2.summary.paid_total === 0 && fin2.recent_payments.length === 0 && rep2.summary.total_bookings === 0 && rep2.packages.length === 0 && dash2.total_bookings === 0 && dash2.total_earnings === 0);
+  check("provider 2's reviews are empty", (await api('GET', '/api/provider/reviews', { token: p2.token })).data.reviews.length === 0);
+  check('provider 1 does see the booking', (await api('GET', '/api/provider/bookings', { token: t.provider })).data.some((b) => b.id === booking.id));
+  check('provider 1 finance includes the payment', (await api('GET', '/api/provider/finance', { token: t.provider })).data.recent_payments.some((x) => x.booking_id === booking.id));
+
+  // Departure rules
+  const low = await api('PUT', `/api/provider/departures/${dep.id}`, { token: t.provider, body: { start_date: dep.start_date, seats_total: seatsAfter.booked_seats - 1 } });
+  check('capacity below booked seats -> 400', low.status === 400 && /already booked/.test(low.error.message), low.body);
+  const del = await api('DELETE', `/api/provider/departures/${dep.id}`, { token: t.provider });
+  check('departure with booking history cannot be deleted -> 409', del.status === 409, del.body);
+  check('the departure is still there', (await api('GET', '/api/provider/departures', { token: t.provider })).data.some((d) => d.id === dep.id));
+  const dup = await api('POST', '/api/provider/departures', { token: t.provider, body: { package_id: 1, start_date: dep.start_date, seats_total: 5 } });
+  check('duplicate departure date -> 409', dup.status === 409, dup.body);
+  const own = await api('POST', '/api/provider/packages', { token: p2.token, body: { title: `P2 Package ${RUN}`, description: 'd', destination_id: 1, price: 20, duration_days: 1, image_url: '/assets/img/cities.jpg' } });
+  check('provider 2 can create its own package', own.status < 300 && own.data.status === 'PENDING');
+  const emptyDep = await api('POST', '/api/provider/departures', { token: p2.token, body: { package_id: own.data.id, start_date: addDays(new Date().toISOString().slice(0, 10), 50), seats_total: 4 } });
+  check('departures need an APPROVED package -> 404', emptyDep.status === 404);
+  await api('PATCH', `/api/admin/packages/${own.data.id}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+  const okDep = await api('POST', '/api/provider/departures', { token: p2.token, body: { package_id: own.data.id, start_date: addDays(new Date().toISOString().slice(0, 10), 50), seats_total: 4 } });
+  check('departure on an approved package works', okDep.status < 300, okDep.body);
+  check('empty departure can be deleted', (await api('DELETE', `/api/provider/departures/${okDep.data.id}`, { token: p2.token })).status < 300);
+
+  // Confirming bookings
+  const [pp] = await pool.execute("INSERT INTO bookings (customer_id, departure_id, num_guests, total_price, status) VALUES (1, ?, 1, 10, 'PENDING')", [dep.id]);
+  await pool.execute("INSERT INTO payments (booking_id, amount, method, status) VALUES (?, 10, 'CARD', 'PAID')", [pp.insertId]);
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM payments WHERE booking_id = ?', [pp.insertId]);
+    await pool.execute('DELETE FROM bookings WHERE id = ?', [pp.insertId]);
+  });
+  const confirm = await api('POST', `/api/provider/bookings/${pp.insertId}/confirm`, { token: t.provider });
+  check('confirm a PENDING booking that is PAID', confirm.status === 200 && confirm.data.status === 'CONFIRMED', confirm.body);
+  const again = await api('POST', `/api/provider/bookings/${pp.insertId}/confirm`, { token: t.provider });
+  check('confirming twice is harmless', again.status === 200 && again.data.alreadyConfirmed === true);
+  const unpaid = await makeBooking(t, { pay: false });
+  const refuse = await api('POST', `/api/provider/bookings/${unpaid.id}/confirm`, { token: t.provider });
+  check('cannot confirm an unpaid booking -> 400', refuse.status === 400, refuse.body);
+  const cancelled = await makeBooking(t, { pay: true });
+  await api('POST', `/api/bookings/${cancelled.id}/cancel`, { token: t.customer });
+  check('cannot confirm a cancelled booking -> 400', (await api('POST', `/api/provider/bookings/${cancelled.id}/confirm`, { token: t.provider })).status === 400);
+  check('confirm missing booking -> 404', (await api('POST', '/api/provider/bookings/99999999/confirm', { token: t.provider })).status === 404);
+  const statusFilter = await api('GET', '/api/provider/bookings?status=CANCELLED', { token: t.provider });
+  check('provider booking status filter', statusFilter.data.length >= 1 && statusFilter.data.every((b) => b.booking_status === 'CANCELLED'));
+
+  // 403 for other roles on provider-only data
+  for (const path of ['finance', 'reviews', 'reports', 'dashboard', 'bookings', 'departures', 'packages']) {
+    check(`customer/admin/super admin -> 403 on /api/provider/${path}`, (await Promise.all([t.customer, t.admin, t.superadmin].map((token) => api('GET', `/api/provider/${path}`, { token })))).every((r) => r.status === 403));
+  }
+});
+
+section('Reviews and ratings', async (t) => {
+  // A finished trip: departure 20 days ago on a 1-day package, booking CONFIRMED and paid
+  const [dep] = await pool.execute("INSERT INTO package_departures (package_id, start_date, seats_total) VALUES (4, DATE_SUB(CURDATE(), INTERVAL 20 DAY), 10)");
+  const ids = [];
+  const mk = async (status) => {
+    const [r] = await pool.execute('INSERT INTO bookings (customer_id, departure_id, num_guests, total_price, status) VALUES (1, ?, 1, 60, ?)', [dep.insertId, status]);
+    ids.push(r.insertId);
+    return r.insertId;
+  };
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM reviews WHERE booking_id IN (SELECT id FROM bookings WHERE departure_id = ?)', [dep.insertId]);
+    await pool.execute('DELETE FROM bookings WHERE departure_id = ?', [dep.insertId]);
+    await pool.execute('DELETE FROM package_departures WHERE id = ?', [dep.insertId]);
+  });
+  const finished = await mk('CONFIRMED');
+  const finished2 = await mk('COMPLETED');
+  const upcoming = await makeBooking(t, { pay: true });
+  const url = (id) => `/api/bookings/${id}/review`;
+
+  check('review before the trip ends -> 400', (await api('POST', url(upcoming.id), { token: t.customer, body: { rating: 5 } })).status === 400);
+  check('no token -> 401', (await api('POST', url(finished), { body: { rating: 5 } })).status === 401);
+  check('provider cannot review -> 403', (await api('POST', url(finished), { token: t.provider, body: { rating: 5 } })).status === 403);
+  for (const bad of [0, 6, 2.5, 'x', null]) {
+    check(`rating ${JSON.stringify(bad)} -> 400`, (await api('POST', url(finished), { token: t.customer, body: { rating: bad } })).status === 400);
+  }
+  check('review of a missing booking -> 404', (await api('POST', url(99999999), { token: t.customer, body: { rating: 5 } })).status === 404);
+
+  const other = `rev.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Other Customer', email: other, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const otherToken = await login(other, 'Secret@123');
+  check("cannot review someone else's booking -> 403", (await api('POST', url(finished), { token: otherToken, body: { rating: 5 } })).status === 403);
+
+  const before = (await api('GET', '/api/provider/reviews', { token: t.provider })).data;
+  const r1 = await api('POST', url(finished), { token: t.customer, body: { rating: 4, comment: 'Great trip' } });
+  check('review a finished trip', r1.status === 201, r1.body);
+  check('the booking is stored as COMPLETED', (await pool.query('SELECT status FROM bookings WHERE id = ?', [finished]))[0][0].status === 'COMPLETED');
+  check('second review of the same booking -> 409', (await api('POST', url(finished), { token: t.customer, body: { rating: 1 } })).status === 409);
+  const r2 = await api('POST', url(finished2), { token: t.customer, body: { rating: 2 } });
+  check('review a COMPLETED booking', r2.status === 201);
+
+  const after = (await api('GET', '/api/provider/reviews', { token: t.provider })).data;
+  const ratings = after.reviews.map((r) => r.rating);
+  const expected = Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10;
+  check('provider sees 2 more reviews', after.stats.review_count === before.stats.review_count + 2);
+  check('average rating matches the ratings', after.stats.average_rating === expected, { expected, got: after.stats.average_rating });
+  check('star counts add up', after.stats.one_star + after.stats.two_star + after.stats.three_star + after.stats.four_star + after.stats.five_star === after.stats.review_count);
+  check('review shows package, customer and comment', after.reviews.some((r) => r.comment === 'Great trip' && r.package_title === 'Island Snorkel Day' && r.customer_name === 'Demo Customer'));
+  const dash = (await api('GET', '/api/provider/dashboard', { token: t.provider })).data;
+  check('dashboard average and count agree', dash.average_rating === expected && dash.review_count === ratings.length);
+  const mine = (await api('GET', '/api/bookings/my', { token: t.customer })).data.find((b) => b.id === finished);
+  check('customer view shows the review and no more review button', mine.review_rating === 4 && !mine.review_eligible);
+});
+
+section('Admin edge cases', async (t) => {
+  // Delete guards
+  const cat = await api('DELETE', '/api/admin/categories/1', { token: t.admin });
+  check('category linked to packages cannot be deleted -> 409', cat.status === 409, cat.body);
+  check('...and it still exists', (await api('GET', '/api/admin/categories/1', { token: t.admin })).status === 200);
+  const dest = await api('DELETE', '/api/admin/destinations/1', { token: t.admin });
+  check('destination linked to packages cannot be deleted -> 409', dest.status === 409, dest.body);
+  check('...and it still exists', (await api('GET', '/api/admin/destinations/1', { token: t.admin })).status === 200);
+  const empty = await api('POST', '/api/admin/categories', { token: t.admin, body: { name: `Temp ${RUN}`, description: 'x' } });
+  check('unused category can be deleted', (await api('DELETE', `/api/admin/categories/${empty.data.id}`, { token: t.admin })).status === 200);
+  check('duplicate category name -> 409', (await api('POST', '/api/admin/categories', { token: t.admin, body: { name: 'Adventure', description: '' } })).status === 409);
+  check('duplicate destination name -> 409', (await api('POST', '/api/admin/destinations', { token: t.admin, body: { name: 'Mountains', description: 'd', image_url: '/x.jpg' } })).status === 409);
+
+  // Counts match reality
+  const packages = (await api('GET', '/api/admin/packages', { token: t.admin })).data;
+  for (const id of [1, 2, 3]) {
+    const d = (await api('GET', `/api/admin/destinations/${id}`, { token: t.admin })).data;
+    check(`destination ${d.name}: package_count matches packages`, d.package_count === packages.filter((p) => p.destination_id === id).length);
+  }
+  for (const id of [1, 2, 3, 4, 5]) {
+    const c = (await api('GET', `/api/admin/categories/${id}`, { token: t.admin })).data;
+    check(`category ${c.name}: package_count matches packages`, Number(c.package_count) === packages.filter((p) => p.category_id === id).length);
+  }
+
+  // Provider rejection and blocking
+  const p = await makeProvider(t, { approve: false });
+  const rejected = await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { provider_status: 'REJECTED' } });
+  check('reject a provider', rejected.status === 200 && rejected.data.provider_status === 'REJECTED', rejected.body);
+  check('REJECTED filter lists them', (await api('GET', '/api/admin/providers?status=REJECTED', { token: t.admin })).data.some((x) => x.id === p.id));
+  const blockedUse = await api('GET', '/api/provider/packages', { token: p.token });
+  check('rejected provider is locked out of provider tools -> 403', blockedUse.status === 403 && /REJECTED/.test(blockedUse.error.message), blockedUse.body);
+  await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { provider_status: 'APPROVED' } });
+  check('re-approving restores access', (await api('GET', '/api/provider/packages', { token: p.token })).status === 200);
+  await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { is_active: false } });
+  check('blocked provider cannot log in -> 403', (await api('POST', '/api/auth/login', { body: { email: p.email, password: 'Secret@123' } })).status === 403);
+  check('blocked provider token stops working -> 403', (await api('GET', '/api/provider/packages', { token: p.token })).status === 403);
+  check('BLOCKED filter lists them', (await api('GET', '/api/admin/providers?status=BLOCKED', { token: t.admin })).data.some((x) => x.id === p.id));
+  check('provider status needs exactly one field -> 400', (await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { provider_status: 'APPROVED', is_active: true } })).status === 400);
+  check('provider_status PENDING is not settable -> 400', (await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { provider_status: 'PENDING' } })).status === 400);
+  check('customers cannot be changed via provider routes -> 404', (await api('PATCH', '/api/admin/providers/1/status', { token: t.admin, body: { is_active: false } })).status === 404);
+
+  // Customer blocking
+  const email = `blk.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Block Me', email, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const token = await login(email, 'Secret@123');
+  await api('PATCH', `/api/admin/customers/${reg.data.id}/status`, { token: t.admin, body: { is_active: false } });
+  check('blocked customer cannot log in -> 403', (await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } })).status === 403);
+  check('blocked customer token stops working -> 403', (await api('GET', '/api/bookings/my', { token })).status === 403);
+  check('BLOCKED filter lists them', (await api('GET', '/api/admin/customers?status=BLOCKED', { token: t.admin })).data.some((x) => x.id === reg.data.id));
+  await api('PATCH', `/api/admin/customers/${reg.data.id}/status`, { token: t.admin, body: { is_active: true } });
+  check('unblocking restores access', (await api('GET', '/api/bookings/my', { token })).status === 200);
+  check('customer status must be a boolean -> 400', (await api('PATCH', `/api/admin/customers/${reg.data.id}/status`, { token: t.admin, body: { is_active: 'no' } })).status === 400);
+  check('a provider id is not a customer -> 404', (await api('PATCH', '/api/admin/customers/2/status', { token: t.admin, body: { is_active: false } })).status === 404);
+
+  // Search edge cases
+  for (const q of ['%', '_', "'", '"; DROP TABLE users; --', 'a'.repeat(300), '%E0']) {
+    const results = await Promise.all(['customers', 'providers', 'destinations', 'categories', 'packages', 'bookings'].map((x) => api('GET', `/api/admin/${x}?search=${encodeURIComponent(q)}`, { token: t.admin })));
+    check(`search ${JSON.stringify(q.slice(0, 12))} never errors`, results.every((r) => r.status === 200), results.map((r) => r.status));
+  }
+  check('users table survived', (await api('GET', '/api/admin/customers', { token: t.admin })).data.length >= 1);
+  const found = await api('GET', '/api/admin/customers?search=Demo', { token: t.admin });
+  check('customer search by name', found.data.some((c) => c.email === 'customer@example.com'));
+  check('customer search by phone/email fragment', (await api('GET', '/api/admin/customers?search=customer@exam', { token: t.admin })).data.length >= 1);
+  check('no match -> empty list', (await api('GET', '/api/admin/customers?search=zzzzqqqq', { token: t.admin })).data.length === 0);
+  check('ACTIVE filter excludes blocked', (await api('GET', '/api/admin/customers?status=ACTIVE', { token: t.admin })).data.every((c) => c.is_active === 1));
+});
+
+section('Security and robustness', async (t) => {
+  // Login lockout after repeated failures (uses a throwaway account so demo logins are unaffected)
+  const email = `lock.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Lock Test', email, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const codes = [];
+  for (let i = 0; i < 5; i += 1) codes.push((await api('POST', '/api/auth/login', { body: { email, password: 'wrong-password' } })).status);
+  check('first 5 wrong passwords -> 401', codes.every((c) => c === 401), codes);
+  const locked = await api('POST', '/api/auth/login', { body: { email, password: 'wrong-password' } });
+  check('6th attempt is locked out -> 429', locked.status === 429, locked.body);
+  check('even the right password is refused while locked -> 429', (await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } })).status === 429);
+  check('other accounts are not affected', (await api('POST', '/api/auth/login', { body: { email: 'customer@example.com', password: PASSWORD } })).status === 200);
+
+  // Static serving and URL handling
+  check('path traversal is blocked', [404, 400].includes((await fetch(`${BASE}/..%2f..%2fpackage.json`)).status));
+  check('path traversal (dotdot) is blocked', [404, 400].includes((await fetch(`${BASE}/../backend/server.js`)).status));
+  check('malformed URL escape -> 400, not 500', (await fetch(`${BASE}/%E0%A4%A`)).status === 400);
+  check('malformed escape in API path -> 400', (await api('GET', '/api/packages/1%')).status === 400);
+  check('unknown API route -> 404 JSON', (await api('GET', '/api/nope')).status === 404);
+  check('wrong method on a known path -> 404', (await api('DELETE', '/api/packages')).status === 404);
+  check('POST to a static path -> 405', (await api('POST', '/index.html')).status === 405);
+  const bad = await api('POST', '/api/auth/login', { raw: '{not json' });
+  check('malformed JSON body -> 400', bad.status === 400 && bad.error.message === 'Invalid JSON body', bad.body);
+  check('missing/invalid token -> 401', (await api('GET', '/api/auth/me', { token: 'abc.def' })).status === 401);
+  check('login never reveals whether the email exists', (await api('POST', '/api/auth/login', { body: { email: 'ghost@example.com', password: 'whatever1' } })).error.message === (await api('POST', '/api/auth/login', { body: { email: 'customer@example.com', password: 'wrong-pass' } })).error.message);
+  const reg2 = await api('POST', '/api/auth/register', { body: { full_name: 'Role Try', email: `role.${RUN}@example.com`, password: 'Secret@123', role: 'ADMIN' } });
+  check('cannot register as ADMIN -> 400', reg2.status === 400);
+  const noHash = JSON.stringify([(await api('GET', '/api/superadmin/admins', { token: t.superadmin })).body, (await api('GET', '/api/admin/customers', { token: t.admin })).body, (await api('GET', '/api/admin/providers', { token: t.admin })).body, (await api('GET', '/api/auth/me', { token: t.admin })).body]);
+  check('no response ever contains a password hash', !/password_hash|\$2[aby]\$/.test(noHash));
+
+  // Every route: bad ids and bodies must never produce a 500, for every role
+  const routes = Object.keys(require('../backend/routes'));
+  const roles = { none: undefined, customer: t.customer, provider: t.provider, admin: t.admin, superadmin: t.superadmin };
+  const bodies = [{ body: {} }, { raw: '{broken' }, { raw: '[]' }, { raw: '"text"' }, { raw: 'null' }];
+  const bad500 = [];
+  let calls = 0;
+  const before = (await api('GET', '/api/users/profile', { token: t.customer })).data;
+  for (const key of routes) {
+    const [method, template] = key.split(' ');
+    if (key === 'POST /api/auth/login') continue; // would trigger the login lockout
+    const idValues = template.includes(':') ? ['abc', '99999999'] : [null];
+    for (const idValue of idValues) {
+      const path = idValue === null ? template : template.replace(/:\w+/g, idValue);
+      for (const token of Object.values(roles)) {
+        for (const payload of (method === 'GET' ? [{}] : bodies)) {
+          const res = await api(method, path, { token, ...payload });
+          calls += 1;
+          const envelope = res.body && typeof res.body.success === 'boolean';
+          if (res.status >= 500 || !envelope) bad500.push(`${key} ${path} -> ${res.status}`);
+        }
+      }
+    }
+  }
+  check(`no 5xx or non-JSON answers in ${calls} hostile requests`, bad500.length === 0, [...new Set(bad500)].slice(0, 12));
+  const after = (await api('GET', '/api/users/profile', { token: t.customer })).data;
+  check('hostile requests changed no demo data', after.full_name === before.full_name && after.email === before.email);
+});
+
 // SECTIONS-END (new sections are added above this line)
+
+async function runCleanups() {
+  while (cleanups.length) {
+    const fn = cleanups.pop();
+    try { await fn(); } catch (err) { console.log(`  cleanup warning: ${err.message}`); }
+  }
+}
 
 async function main() {
   const filter = process.argv[2];
@@ -685,9 +972,7 @@ async function main() {
       failed += 1;
       console.log(`  FAIL section crashed: ${err.stack || err.message}`);
     }
-  }
-  for (const fn of cleanups.reverse()) {
-    try { await fn(); } catch (err) { console.log(`  cleanup warning: ${err.message}`); }
+    await runCleanups(); // each section leaves the database as it found it
   }
   // Remove the audit entries this run created (test actions should not clutter the real log)
   await pool.execute('DELETE FROM audit_logs WHERE id > ?', [lastLogId]);

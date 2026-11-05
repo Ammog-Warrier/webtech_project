@@ -31,6 +31,10 @@ const server = http.createServer(async (req, res) => {
     }
   } catch (err) {
     // Centralized error handling
+    if (err instanceof URIError) {
+      if (res.headersSent) return res.end();
+      return fail(res, 400, 'Malformed URL');
+    }
     console.error(err);
     if (res.headersSent) return res.end();
     fail(res, err.status || 500, err.status ? err.message : 'Internal server error');
