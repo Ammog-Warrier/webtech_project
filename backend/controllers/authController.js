@@ -1,6 +1,7 @@
 const { ok, fail } = require('../utils/response');
 const { parseJsonBody } = require('../utils/body');
 const { registerUser, loginUser } = require('../services/authService');
+const { getUserPermissions } = require('../services/permissionService');
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isText = (value) => typeof value === 'string';
@@ -33,7 +34,11 @@ async function login(req, res) {
   ok(res, await loginUser(email, body.password));
 }
 
+// For ADMIN and SUPER_ADMIN the response also lists the effective permissions so the UI can hide pages.
 async function getMe(req, res) {
+  if (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN') {
+    return ok(res, { ...req.user, permissions: await getUserPermissions(req.user) });
+  }
   ok(res, req.user);
 }
 

@@ -316,6 +316,79 @@ section('Super admin: admin accounts', async (t) => {
   check('deleted admin is gone -> 404', (await api('GET', `${url}/${id}`, { token: t.superadmin })).status === 404);
 });
 
+section('Admin permissions', async (t) => {
+  const url = '/api/superadmin/admins';
+  const list = await api('GET', '/api/superadmin/permissions', { token: t.superadmin });
+  const names = list.data.map((x) => x.name);
+  check('permission list', list.status === 200 && names.length === 6 && names.includes('MODERATE_PACKAGES') && list.data.every((x) => x.description));
+  check('admin cannot read the permission list -> 403', (await api('GET', '/api/superadmin/permissions', { token: t.admin })).status === 403);
+
+  const me = await api('GET', '/api/auth/me', { token: t.admin });
+  check('demo admin has every permission in /api/auth/me', me.status === 200 && me.data.permissions.length === 6, me.body);
+  const meSuper = await api('GET', '/api/auth/me', { token: t.superadmin });
+  check('super admin /me lists every permission', meSuper.data.permissions.length === 6);
+  check('customer /me has no permissions field', (await api('GET', '/api/auth/me', { token: t.customer })).data.permissions === undefined);
+
+  const email = `perm.admin.${RUN}@example.com`;
+  const pw = 'Secret@123';
+  const bad = await api('POST', url, { token: t.superadmin, body: { full_name: 'P', email, password: pw, permissions: ['NOPE'] } });
+  check('create with unknown permission -> 400', bad.status === 400);
+  check('create with non-array permissions -> 400', (await api('POST', url, { token: t.superadmin, body: { full_name: 'P', email, password: pw, permissions: 'MANAGE_CUSTOMERS' } })).status === 400);
+
+  const created = await api('POST', url, { token: t.superadmin, body: { full_name: 'Perm Admin', email, password: pw, permissions: ['MANAGE_CUSTOMERS', 'MANAGE_CUSTOMERS'] } });
+  check('create with permissions (duplicates removed)', created.status === 201 && JSON.stringify(created.data.permissions) === '["MANAGE_CUSTOMERS"]', created.body);
+  const id = created.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM audit_logs WHERE user_id = ?', [id]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+  });
+  const token = await login(email, pw);
+
+  const meNew = await api('GET', '/api/auth/me', { token });
+  check('new admin /me shows its permissions', JSON.stringify(meNew.data.permissions) === '["MANAGE_CUSTOMERS"]');
+  check('allowed: customers', (await api('GET', '/api/admin/customers', { token })).status === 200);
+  check('allowed: dashboard needs no permission', (await api('GET', '/api/admin/dashboard', { token })).status === 200);
+  for (const [path, perm] of [['providers', 'MANAGE_PROVIDERS'], ['packages', 'MODERATE_PACKAGES'], ['destinations', 'MANAGE_CATALOGUE'], ['categories', 'MANAGE_CATALOGUE'], ['bookings', 'VIEW_BOOKINGS'], ['reports', 'VIEW_REPORTS']]) {
+    const res = await api('GET', `/api/admin/${path}`, { token });
+    check(`denied without ${perm}: GET /${path} -> 403`, res.status === 403, res.body);
+  }
+  check('denied: writing a category -> 403', (await api('POST', '/api/admin/categories', { token, body: { name: `X${RUN}`, description: '' } })).status === 403);
+  check('denied: moderating a package -> 403', (await api('PATCH', '/api/admin/packages/1/status', { token, body: { status: 'APPROVED' } })).status === 403);
+  check('denied: provider status -> 403', (await api('PATCH', '/api/admin/providers/2/status', { token, body: { is_active: true } })).status === 403);
+  check('permissions do not open super admin routes -> 403', (await api('GET', url, { token })).status === 403);
+
+  const got = await api('GET', `${url}/${id}/permissions`, { token: t.superadmin });
+  check('read permissions', got.status === 200 && got.data.permissions.length === 1);
+  check('read permissions bad id -> 400', (await api('GET', `${url}/x/permissions`, { token: t.superadmin })).status === 400);
+  check('read permissions of a non-admin -> 404', (await api('GET', `${url}/1/permissions`, { token: t.superadmin })).status === 404);
+  check('replace: unknown name -> 400', (await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: { permissions: ['MANAGE_CUSTOMERS', 'NOPE'] } })).status === 400);
+  check('replace: not an array -> 400', (await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: { permissions: 5 } })).status === 400);
+  check('replace: missing body field -> 400', (await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: {} })).status === 400);
+  check('replace: non-admin -> 404', (await api('PUT', `${url}/1/permissions`, { token: t.superadmin, body: { permissions: [] } })).status === 404);
+  check('admin cannot change permissions -> 403', (await api('PUT', `${url}/${id}/permissions`, { token: t.admin, body: { permissions: names } })).status === 403);
+  check('admin cannot change own permissions -> 403', (await api('PUT', `${url}/3/permissions`, { token: t.admin, body: { permissions: [] } })).status === 403);
+
+  const put = await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: { permissions: ['MODERATE_PACKAGES', 'VIEW_REPORTS'] } });
+  check('replace permissions', put.status === 200 && JSON.stringify(put.data.permissions) === '["MODERATE_PACKAGES","VIEW_REPORTS"]', put.body);
+  check('change takes effect immediately: packages now 200', (await api('GET', '/api/admin/packages', { token })).status === 200);
+  check('change takes effect immediately: reports now 200', (await api('GET', '/api/admin/reports', { token })).status === 200);
+  check('revoked permission: customers now 403', (await api('GET', '/api/admin/customers', { token })).status === 403);
+  check('list shows permission_count', (await api('GET', `${url}/${id}`, { token: t.superadmin })).data.permission_count === 2);
+
+  const none = await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: { permissions: [] } });
+  check('empty array revokes everything', none.status === 200 && none.data.permissions.length === 0);
+  check('no permissions: packages 403', (await api('GET', '/api/admin/packages', { token })).status === 403);
+
+  const bare = await api('POST', url, { token: t.superadmin, body: { full_name: 'Bare', email: `bare.${RUN}@example.com`, password: pw } });
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM audit_logs WHERE user_id = ?', [bare.data.id]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [bare.data.id]);
+  });
+  check('admin created without permissions starts with none (least privilege)', bare.status === 201 && bare.data.permissions.length === 0);
+
+  check('super admin passes every permission check', (await Promise.all(['customers', 'providers', 'packages', 'destinations', 'categories', 'bookings', 'reports'].map((x) => api('GET', `/api/admin/${x}`, { token: t.superadmin })))).every((r) => r.status === 200));
+});
+
 // SECTIONS-END (new sections are added above this line)
 
 async function main() {

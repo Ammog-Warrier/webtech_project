@@ -1,7 +1,7 @@
 CREATE DATABASE IF NOT EXISTS local_tourism CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE local_tourism;
 
--- Full schema (migrations 001-011 applied). Extend via database/migrations/ as features are built.
+-- Full schema (migrations 001-012 applied). Extend via database/migrations/ as features are built.
 CREATE TABLE IF NOT EXISTS roles (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(30) NOT NULL UNIQUE

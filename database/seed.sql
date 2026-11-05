@@ -88,3 +88,17 @@ INSERT INTO package_departures (package_id, start_date, seats_total)
 SELECT p.id, DATE_ADD(CURDATE(), INTERVAL o.days DAY), p.max_group_size
 FROM packages p JOIN (SELECT 30 days UNION ALL SELECT 60) o
 WHERE NOT EXISTS (SELECT 1 FROM package_departures d WHERE d.package_id = p.id);
+
+-- Demo admin gets every permission (development only). Safe to re-run.
+INSERT IGNORE INTO admin_permissions (admin_id, permission)
+SELECT u.id, p.permission
+FROM users u
+JOIN (
+  SELECT 'MANAGE_CUSTOMERS' permission
+  UNION ALL SELECT 'MANAGE_PROVIDERS'
+  UNION ALL SELECT 'MODERATE_PACKAGES'
+  UNION ALL SELECT 'MANAGE_CATALOGUE'
+  UNION ALL SELECT 'VIEW_BOOKINGS'
+  UNION ALL SELECT 'VIEW_REPORTS'
+) p
+WHERE u.email = 'admin@example.com';
