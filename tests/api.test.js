@@ -240,6 +240,82 @@ section('Admin reports, net revenue and pagination', async (t) => {
   check('category search works', cat.status === 200 && cat.data.length === 1 && cat.data[0].name === 'Adventure', cat.body);
 });
 
+section('Super admin: admin accounts', async (t) => {
+  const url = '/api/superadmin/admins';
+  check('no token -> 401', (await api('GET', url)).status === 401);
+  check('customer -> 403', (await api('GET', url, { token: t.customer })).status === 403);
+  check('provider -> 403', (await api('GET', url, { token: t.provider })).status === 403);
+  check('admin -> 403 (list)', (await api('GET', url, { token: t.admin })).status === 403);
+  check('admin -> 403 (create)', (await api('POST', url, { token: t.admin, body: {} })).status === 403);
+
+  const email = `new.admin.${RUN}@example.com`;
+  const good = { full_name: 'Test Admin', email, phone: '9876543210', password: 'Secret@123' };
+  check('missing name -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, full_name: '' } })).status === 400);
+  check('bad email -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, email: 'nope' } })).status === 400);
+  check('short password -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, password: 'short' } })).status === 400);
+  check('missing password -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, password: undefined } })).status === 400);
+  check('bad phone -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, phone: 'abc' } })).status === 400);
+
+  const created = await api('POST', url, { token: t.superadmin, body: good });
+  check('create admin -> 201', created.status === 201 && created.data.email === email && created.data.is_active === 1, created.body);
+  check('response never contains a password hash', !JSON.stringify(created.body).includes('password'));
+  const id = created.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM audit_logs WHERE user_id = ?', [id]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+  });
+  check('duplicate email -> 409', (await api('POST', url, { token: t.superadmin, body: good })).status === 409);
+
+  const loggedIn = await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } });
+  check('new admin can log in with the ADMIN role', loggedIn.status === 200 && loggedIn.data.user.role === 'ADMIN', loggedIn.body);
+  const adminToken = loggedIn.data.token;
+
+  const list = await api('GET', `${url}?search=${encodeURIComponent(email)}`, { token: t.superadmin });
+  check('list + search finds it', list.status === 200 && list.data.length === 1 && list.data[0].id === id);
+  const all = await api('GET', url, { token: t.superadmin });
+  check('list only contains ADMIN accounts', all.data.every((a) => a.email !== 'superadmin@example.com' && a.email !== 'customer@example.com') && all.data.some((a) => a.email === 'admin@example.com'));
+  check('invalid status filter -> 400', (await api('GET', `${url}?status=X`, { token: t.superadmin })).status === 400);
+  check('status=ACTIVE filter', (await api('GET', `${url}?status=ACTIVE`, { token: t.superadmin })).data.some((a) => a.id === id));
+  const paged = await api('GET', `${url}?page=1&limit=1`, { token: t.superadmin });
+  check('pagination', paged.status === 200 && paged.data.items.length === 1 && paged.data.total === all.data.length);
+
+  const one = await api('GET', `${url}/${id}`, { token: t.superadmin });
+  check('detail', one.status === 200 && one.data.full_name === 'Test Admin');
+  check('detail bad id -> 400', (await api('GET', `${url}/abc`, { token: t.superadmin })).status === 400);
+  check('detail missing -> 404', (await api('GET', `${url}/99999999`, { token: t.superadmin })).status === 404);
+  check('customer id is not reachable here -> 404', (await api('GET', `${url}/1`, { token: t.superadmin })).status === 404);
+  check('super admin id is not reachable here -> 404', (await api('GET', `${url}/4`, { token: t.superadmin })).status === 404);
+  check('cannot disable a super admin here -> 404', (await api('PATCH', `${url}/4/status`, { token: t.superadmin, body: { is_active: false } })).status === 404);
+  check('cannot delete a super admin here -> 404', (await api('DELETE', `${url}/4`, { token: t.superadmin })).status === 404);
+  check('cannot delete a customer here -> 404', (await api('DELETE', `${url}/1`, { token: t.superadmin })).status === 404);
+
+  const edited = await api('PUT', `${url}/${id}`, { token: t.superadmin, body: { full_name: 'Renamed Admin', email, phone: '' } });
+  check('update keeps password when none given', edited.status === 200 && edited.data.full_name === 'Renamed Admin' && edited.data.phone === null);
+  check('old password still works', (await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } })).status === 200);
+  check('update to an existing email -> 409', (await api('PUT', `${url}/${id}`, { token: t.superadmin, body: { full_name: 'X', email: 'customer@example.com' } })).status === 409);
+  check('update bad body -> 400', (await api('PUT', `${url}/${id}`, { token: t.superadmin, body: { full_name: '' } })).status === 400);
+  await api('PUT', `${url}/${id}`, { token: t.superadmin, body: { full_name: 'Renamed Admin', email, password: 'Changed@456' } });
+  check('password reset: old password rejected', (await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } })).status === 401);
+  check('password reset: new password works', (await api('POST', '/api/auth/login', { body: { email, password: 'Changed@456' } })).status === 200);
+
+  check('status needs a boolean -> 400', (await api('PATCH', `${url}/${id}/status`, { token: t.superadmin, body: { is_active: 'no' } })).status === 400);
+  const off = await api('PATCH', `${url}/${id}/status`, { token: t.superadmin, body: { is_active: false } });
+  check('disable admin', off.status === 200 && off.data.is_active === 0);
+  check('disabled admin cannot log in -> 403', (await api('POST', '/api/auth/login', { body: { email, password: 'Changed@456' } })).status === 403);
+  check('disabled admin existing token stops working -> 403', (await api('GET', '/api/auth/me', { token: adminToken })).status === 403);
+  check('status=DISABLED filter', (await api('GET', `${url}?status=DISABLED`, { token: t.superadmin })).data.some((a) => a.id === id));
+  const on = await api('PATCH', `${url}/${id}/status`, { token: t.superadmin, body: { is_active: true } });
+  check('re-enable admin', on.status === 200 && on.data.is_active === 1);
+
+  await pool.execute("INSERT INTO audit_logs (user_id, action, entity, entity_id, details) VALUES (?, 'TEST', 'users', ?, 'history')", [id, id]);
+  const blocked = await api('DELETE', `${url}/${id}`, { token: t.superadmin });
+  check('admin with activity cannot be deleted -> 409', blocked.status === 409, blocked.body);
+  await pool.execute('DELETE FROM audit_logs WHERE user_id = ?', [id]);
+  const deleted = await api('DELETE', `${url}/${id}`, { token: t.superadmin });
+  check('admin without activity can be deleted', deleted.status === 200, deleted.body);
+  check('deleted admin is gone -> 404', (await api('GET', `${url}/${id}`, { token: t.superadmin })).status === 404);
+});
+
 // SECTIONS-END (new sections are added above this line)
 
 async function main() {
@@ -249,6 +325,7 @@ async function main() {
     console.error(`Server not reachable at ${BASE}. Start it first (npm start).`);
     process.exit(2);
   }
+  const [[{ lastLogId }]] = await pool.query('SELECT COALESCE(MAX(id), 0) AS lastLogId FROM audit_logs');
   const t = await tokens();
   for (const { name, fn } of sections) {
     if (filter && !name.toLowerCase().includes(filter.toLowerCase())) continue;
@@ -263,6 +340,8 @@ async function main() {
   for (const fn of cleanups.reverse()) {
     try { await fn(); } catch (err) { console.log(`  cleanup warning: ${err.message}`); }
   }
+  // Remove the audit entries this run created (test actions should not clutter the real log)
+  await pool.execute('DELETE FROM audit_logs WHERE id > ?', [lastLogId]);
   console.log(`\n${passed} passed, ${failed} failed`);
   await pool.end();
   process.exit(failed ? 1 : 0);
