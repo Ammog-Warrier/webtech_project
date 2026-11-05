@@ -79,6 +79,9 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/auth/me | Bearer token | Return currently authenticated user (`id, full_name, email, phone, role, provider_status`; ADMIN and SUPER_ADMIN also get `permissions`, an array of their effective permission names). 401 unauthenticated, 403 account disabled |
 | GET | /api/users/profile | Bearer token | Return user profile with attached address (`id, full_name, email, phone, role, provider_status, address`). 401 unauthenticated |
 | PUT | /api/users/profile | Bearer token | Update user profile name, phone, and upsert primary address. Body: `full_name`, optional `phone`, optional `address` (`street, city, state, postal_code, country`). 400 invalid input |
+| GET | /api/wishlist | CUSTOMER | Saved packages, newest first (`package_id, title, price, duration_days, image_url, destination_name, category_name, added_at`). Only APPROVED packages are shown; a package that is later rejected or archived stays saved but hidden |
+| POST | /api/wishlist | CUSTOMER | Body: `package_id`. Only APPROVED packages (404 otherwise, 400 for a bad id). Idempotent: 201 when added, 200 if already saved. Returns `{ package_id, wishlisted: true }` |
+| DELETE | /api/wishlist/:packageId | CUSTOMER | Idempotent: always 200 with `{ package_id, wishlisted: false, removed }` (`removed` is false if it was not saved); 400 for a bad id |
 | POST | /api/bookings | CUSTOMER | Create booking reserving seats. Body: `departure_id`, `num_guests`. Locks departure row, verifies seat availability against PENDING/CONFIRMED reservations, computes total_price snapshot, returns booking in PENDING status (201) |
 | GET | /api/bookings/my | CUSTOMER | Return all bookings for the logged-in customer with departure date, destination, payment status, and review status |
 | POST | /api/bookings/:id/pay | CUSTOMER | Simulate payment for a PENDING booking. Body: `method` (`CARD`, `UPI`, `NET_BANKING`). Locks booking, records payment (PAID), transitions booking to CONFIRMED atomically |
@@ -100,6 +103,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at`. *Note on specification alignment:* corresponds to `system_logs` in the project spec; standardizes column names with our entity foreign key pattern. |
 | admin_permissions | Permissions granted to ADMIN accounts by a super admin: `admin_id` FK to users, `permission` (one of the names in the Admin permissions section), `created_at`; unique per (admin, permission) |
 | settings | Key-value store for system settings: `setting_key` PK, `setting_value`, `description`, `updated_at`. Editable keys and their rules are in `backend/utils/settings.js`: `maintenance_mode` (`true`/`false`) and `booking_cancellation_hours_limit` (whole hours, 0-720) |
+| wishlists | Customer saved packages: `customer_id` FK to users, `package_id` FK to packages (both `ON DELETE CASCADE`), `created_at`; unique per (customer, package) |
 | addresses | User address records: `user_id` FK to users (unique, enforced by migration 010), `street`, `city`, `state`, `postal_code`, `country`, `created_at` |
 
 ### Authentication
@@ -137,6 +141,7 @@ A new admin created without `permissions` starts with none (least privilege); pa
 |---|---|---|---|---|
 | Browse approved packages & departures | yes | yes | yes | yes |
 | Book, pay, cancel own booking, review | yes | | | |
+| Save packages to a wishlist | yes | | | |
 | View & update personal profile/address | yes | yes | yes | yes |
 | Create/edit own packages and departures | | approved providers | | |
 | View bookings of own packages | | yes | | |
@@ -192,6 +197,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Wishlist: migration 013 (`wishlists` table), `GET/POST /api/wishlist`, `DELETE /api/wishlist/:packageId`.
 - 2026-11-06: Step 5.3/5.4 Super admin system tools: `GET /api/superadmin/logs` (filters, SQL pagination), `GET /api/superadmin/settings`, `PUT /api/superadmin/settings/:key` with per-key validation. `maintenance_mode` is now enforced for non-admin API requests (503).
 - 2026-11-06: Step 5.2 Admin permissions: `requirePermission()` middleware now guards every admin endpoint (except the dashboard); `GET /api/superadmin/permissions`, `GET/PUT /api/superadmin/admins/:id/permissions`; optional `permissions` when creating an admin; `/api/auth/me` returns `permissions` for admins; migration 012 grants existing admins everything; `seed.sql` grants the demo admin everything.
 - 2026-11-06: Step 5.1 Super admin admin-account management: `/api/superadmin/admins` (list, create, get, update, enable/disable, delete), all logged. `tests/api.test.js` now removes the audit entries it creates.

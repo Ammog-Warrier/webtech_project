@@ -93,6 +93,13 @@ const {
   putSetting: putSuperAdminSetting,
 } = require('../controllers/superAdminSystemController');
 
+// Customer wishlist
+const {
+  getWishlist,
+  addWishlistItem,
+  removeWishlistItem,
+} = require('../controllers/wishlistController');
+
 const {
   requireAuth,
   requireRole,
@@ -346,6 +353,11 @@ const routes = {
 
   // Provider business reports
   'GET /api/provider/reports': requireApprovedProvider(getMyReports),
+
+  // Customer wishlist
+  'GET /api/wishlist': requireRole('CUSTOMER', getWishlist),
+  'POST /api/wishlist': requireRole('CUSTOMER', addWishlistItem),
+  'DELETE /api/wishlist/:packageId': requireRole('CUSTOMER', removeWishlistItem),
 
   // Customer booking management
   'POST /api/bookings': requireRole('CUSTOMER', createNewBooking),
