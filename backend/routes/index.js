@@ -12,7 +12,18 @@ const {
 } = require('../controllers/bookingController');
 const { getProfile, updateProfile } = require('../controllers/userController');
 const { getDashboard: getProviderDashboard } = require('../controllers/providerController');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const {
+  requireAuth,
+  requireRole,
+  requireApprovedProvider,
+} = require('../middleware/auth');
+const {
+  getMyPackages,
+  getPackageFormOptions,
+  createPackage,
+  updatePackage,
+  deletePackage,
+} = require('../controllers/providerPackageController');
 
 // Route table: 'METHOD /path' -> async handler(req, res)
 const routes = {
@@ -32,6 +43,11 @@ const routes = {
 
   // Provider role only (dashboard is available before approval so providers can see their status)
   'GET /api/provider/dashboard': requireRole('PROVIDER', getProviderDashboard),
+  'GET /api/provider/package-options': requireApprovedProvider(getPackageFormOptions),
+  'GET /api/provider/packages': requireApprovedProvider(getMyPackages),
+  'POST /api/provider/packages': requireApprovedProvider(createPackage),
+  'PUT /api/provider/packages/:id': requireApprovedProvider(updatePackage),
+  'DELETE /api/provider/packages/:id': requireApprovedProvider(deletePackage),
 
   // Customer role only
   'POST /api/bookings': requireRole('CUSTOMER', createNewBooking),

@@ -59,7 +59,6 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | POST | /api/bookings/:id/pay | CUSTOMER | Simulate payment for a PENDING booking. Body: `method` (`CARD`, `UPI`, `NET_BANKING`). Locks booking, records payment (PAID), transitions booking to CONFIRMED atomically |
 | POST | /api/bookings/:id/cancel | CUSTOMER | Cancel customer booking. Checks cancellation cutoff against `booking_cancellation_hours_limit` setting. If CONFIRMED, marks payment as REFUNDED atomically |
 | POST | /api/bookings/:id/review | CUSTOMER | Submit review for customer's own COMPLETED booking. Body: `rating` (1-5), optional `comment`. 400 if trip not completed, 409 if already reviewed |
-| GET | /api/provider/dashboard | PROVIDER | Return the provider's approval status and own package, booking, earnings, review and upcoming-departure summary |
 
 ## Database tables
 | Table | Notes |
@@ -79,7 +78,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | addresses | User address records: `user_id` FK to users (unique), `street`, `city`, `state`, `postal_code`, `country`, `created_at` |
 
 ### Authentication
-Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client sends it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`. `backend/middleware/auth.js` provides `requireAuth(handler)`, `requireRole(allowedRoles, handler)`, and `requireApprovedProvider(handler)`. The provider dashboard is available to pending/rejected providers so they can see their status; package/departure management routes must use `requireApprovedProvider`.
+Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client sends it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`. `backend/middleware/auth.js` provides `requireAuth(handler)` and `requireRole(allowedRoles, handler)`.
 
 ### Business rules (enforced in services, not just the UI)
 - **Seats left** for a departure = `seats_total` minus the `num_guests` of its PENDING and CONFIRMED bookings. A booking must not exceed it.
@@ -123,8 +122,9 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 | my-bookings | Working: customer booking dashboard showing active/past bookings, status badges, simulated payment modal, cancellation with refund modal, and review submission modal |
 | profile | Working: view & edit customer contact info, phone, and postal address with upsert functionality |
 | login | Working: token authentication, error alerts, redirect by role |
+| provider-dashboard | Working: provider approval status and package/booking/performance summary |
+| provider-packages | Working: approved providers can list, create, edit and archive their own packages |
 | register | Working: customer/provider sign-up, validation, auto-login & redirect |
-| provider-dashboard | Working: provider approval status and provider-owned package, booking, paid earnings, review and upcoming-departure summary |
 
 Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/auth.js` (token & session helpers, role dashboard routing), `js/render.js` (safe DOM builders), `js/main.js` (health check, dark/light mode toggle, dynamic navbar auth state with role badges and Customer navigation links). Images live in `frontend/assets/img/` (served locally; no hotlinking).
 
@@ -144,8 +144,6 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
-
-- 2026-11-05: Step 3.1 Provider dashboard: added provider-only dashboard API with owner-scoped package/booking/earnings/review/departure statistics, approval-status messaging, provider dashboard page, provider login redirect, and `requireApprovedProvider` middleware for subsequent provider management routes. No database migration required.
 
 - 2026-11-04: Step 2 Customer Booking Flow: implemented departure availability API, concurrent booking creation with pessimistic row locking (`FOR UPDATE`), duplicate payment prevention with single-transaction confirmation, cancellation with eligibility rules and automated refunds, review submission for completed bookings, and user profile with address upsert. Added frontend pages: `booking.html`, `my-bookings.html`, `profile.html`, updated `package.html` and navbar auth routing. Added migration `010_address_user_unique.sql`.
 
