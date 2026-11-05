@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Customer Management · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a>
+      <a href="/admin-dashboard.html">Admin</a>
+      <a href="/admin-customers.html" class="active">Customers</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container admin-dashboard">
+    <div class="admin-dashboard-heading">
+      <div><p class="eyebrow">ADMINISTRATION</p><h1>Customer management</h1><p class="muted">View customer accounts and manage account access.</p></div>
+      <a class="btn btn-secondary" href="/admin-dashboard.html">Back to dashboard</a>
+    </div>
+    <div id="customer-status" class="admin-dashboard-status" role="status" aria-live="polite">Loading customers…</div>
+    <p id="customer-error" class="auth-alert" role="alert"></p>
+
+    <section class="admin-customer-toolbar" aria-label="Customer filters">
+      <label class="admin-customer-search" for="customer-search">Search customers</label>
+      <input id="customer-search" type="search" placeholder="Name, email or phone">
+      <label for="customer-status-filter">Account status</label>
+      <select id="customer-status-filter">
+        <option value="ALL">All customers</option>
+        <option value="ACTIVE">Active</option>
+        <option value="BLOCKED">Blocked</option>
+      </select>
+      <button type="button" id="refresh-customers" class="btn btn-secondary">Refresh</button>
+    </section>
+
+    <section class="admin-customer-table-wrap" aria-labelledby="customer-list-title">
+      <h2 id="customer-list-title">Registered customers</h2>
+      <div class="table-responsive">
+        <table class="admin-customer-table">
+          <thead><tr><th>Customer</th><th>Contact</th><th>Bookings</th><th>Joined</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="customer-table-body"><tr><td colspan="6">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    <section id="customer-details" class="admin-customer-details" hidden aria-live="polite"></section>
+  </div></main>
+
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/admin-customers.js"></script>
+</body>
+</html>

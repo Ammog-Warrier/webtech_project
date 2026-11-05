@@ -16,6 +16,11 @@ const {
 const { getProfile, updateProfile } = require('../controllers/userController');
 const { getDashboard: getProviderDashboard } = require('../controllers/providerController');
 const { getDashboard: getAdminDashboard } = require('../controllers/adminDashboardController');
+const {
+  getCustomers: getAdminCustomers,
+  getCustomerDetails: getAdminCustomerDetails,
+  updateCustomerStatus: updateAdminCustomerStatus,
+} = require('../controllers/adminCustomerController');
 
 const {
   requireAuth,
@@ -68,6 +73,9 @@ const routes = {
 
   // Admin dashboard
   'GET /api/admin/dashboard': requireRole(['ADMIN', 'SUPER_ADMIN'], getAdminDashboard),
+  'GET /api/admin/customers': requireRole(['ADMIN', 'SUPER_ADMIN'], getAdminCustomers),
+  'GET /api/admin/customers/:id': requireRole(['ADMIN', 'SUPER_ADMIN'], getAdminCustomerDetails),
+  'PATCH /api/admin/customers/:id/status': requireRole(['ADMIN', 'SUPER_ADMIN'], updateAdminCustomerStatus),
 
   // Provider dashboard
   'GET /api/provider/dashboard': requireRole('PROVIDER', getProviderDashboard),

@@ -185,3 +185,14 @@ Approved providers can view booking records associated with packages they own:
 
 All provider booking queries scope records through `packages.provider_id = authenticated user id`. Payment processing currently confirms paid bookings automatically; the provider confirmation action is a guarded fallback.
 Frontend: `/provider-bookings.html`.
+
+
+## Admin customer management (Step 4.2)
+
+Admin and Super Admin customer-management endpoints:
+
+- `GET /api/admin/customers?search=&status=` lists customer accounts. `status` may be `ACTIVE` or `BLOCKED`; search matches name, email, or phone.
+- `GET /api/admin/customers/:id` returns one customer's details and booking count.
+- `PATCH /api/admin/customers/:id/status` accepts `{ "is_active": true|false }` to unblock or block a customer.
+
+These endpoints are restricted to `ADMIN` and `SUPER_ADMIN`. The service filters by the `CUSTOMER` role, so provider and administrator accounts cannot be changed through customer-management routes. No schema migration is required.
