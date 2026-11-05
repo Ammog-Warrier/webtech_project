@@ -5,6 +5,7 @@ const {
   updateCategory,
   deleteCategory,
 } = require('../services/adminCategoryService');
+const { logAction } = require('../services/auditService');
 const { parseJsonBody } = require('../utils/body');
 const { ok, fail } = require('../utils/response');
 
@@ -58,6 +59,7 @@ async function createAdminCategory(req, res) {
     if (validation.error) return fail(res, 400, validation.error);
 
     const category = await createCategory(validation.value);
+    await logAction(req.user.id, 'CATEGORY_CREATED', 'categories', category.id, category.name);
     return ok(res, category, 201);
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
@@ -78,6 +80,7 @@ async function updateAdminCategory(req, res) {
     if (!existing) return fail(res, 404, 'Category not found.');
 
     await updateCategory(Number(req.params.id), validation.value);
+    await logAction(req.user.id, 'CATEGORY_UPDATED', 'categories', Number(req.params.id), validation.value.name);
     return ok(res, await getCategoryById(Number(req.params.id)));
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
@@ -97,6 +100,7 @@ async function deleteAdminCategory(req, res) {
       return fail(res, 409, 'This category is linked to packages and cannot be deleted.');
     }
     await deleteCategory(Number(req.params.id));
+    await logAction(req.user.id, 'CATEGORY_DELETED', 'categories', Number(req.params.id), category.name);
     return ok(res, { message: 'Category deleted successfully.' });
   } catch (error) {
     if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.code === 'ER_NO_REFERENCED_ROW_2') {
