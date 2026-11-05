@@ -1,6 +1,7 @@
 const { logAction } = require('../services/auditService');
 const { ok, fail } = require('../utils/response');
 const { parseJsonBody } = require('../utils/body');
+const { parsePaging, applyPaging } = require('../utils/pagination');
 const {
   listAdminDestinations,
   getAdminDestination,
@@ -40,8 +41,9 @@ function cleanDestination(body) {
 async function getDestinations(req, res) {
   try {
     const url = new URL(req.url, 'http://localhost');
+    const paging = parsePaging(url.searchParams);
     const destinations = await listAdminDestinations(url.searchParams.get('search') || '');
-    return ok(res, destinations);
+    return ok(res, applyPaging(destinations, paging));
   } catch (err) {
     return fail(res, err.status || 500, err.message || 'Unable to load destinations');
   }

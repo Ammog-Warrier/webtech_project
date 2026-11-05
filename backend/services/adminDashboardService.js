@@ -39,7 +39,8 @@ async function getAdminDashboard() {
   ];
 
   for (const field of numericFields) row[field] = Number(row[field]);
-  row.net_collected = row.paid_revenue - row.refunded_amount;
+  // A refunded payment is no longer counted as PAID, so money still held = paid_revenue.
+  row.net_collected = row.paid_revenue;
   return row;
 }
 
