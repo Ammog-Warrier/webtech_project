@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Categories | Local Tourism</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="navbar container">
+      <a class="logo" href="index.html">Local Tourism</a>
+      <div class="nav-links"><a href="admin-dashboard.html">Admin Dashboard</a></div>
+    </nav>
+  </header>
+
+  <main class="container section">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Administration</p>
+        <h1>Category Management</h1>
+        <p>Create and maintain the categories used to classify travel packages.</p>
+      </div>
+    </div>
+
+    <section class="card" style="margin-bottom: 1.5rem;">
+      <h2 id="form-title">Add category</h2>
+      <form id="category-form">
+        <input type="hidden" id="category-id">
+        <div class="form-group">
+          <label for="category-name">Name</label>
+          <input id="category-name" name="name" maxlength="100" required>
+        </div>
+        <div class="form-group">
+          <label for="category-description">Description</label>
+          <textarea id="category-description" name="description" rows="3" maxlength="5000"></textarea>
+        </div>
+        <div class="button-group">
+          <button class="btn btn-primary" type="submit" id="save-button">Save category</button>
+          <button class="btn btn-secondary" type="button" id="cancel-edit" hidden>Cancel edit</button>
+        </div>
+      </form>
+      <p id="form-message" role="status" aria-live="polite"></p>
+    </section>
+
+    <section>
+      <div class="section-heading">
+        <h2>Categories</h2>
+        <input id="category-search" type="search" placeholder="Search categories..." aria-label="Search categories">
+      </div>
+      <p id="list-message" role="status" aria-live="polite"></p>
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr><th>Name</th><th>Description</th><th>Packages</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="category-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+<script src="js/main.js"></script>
+<script src="js/api.js"></script>
+<script src="js/admin-categories.js"></script>
+</body>
+</html>

@@ -216,4 +216,15 @@ Admin and Super Admin endpoints:
 - `PUT /api/admin/destinations/:id` updates those fields.
 - `DELETE /api/admin/destinations/:id` deletes a destination only when no packages reference it.
 
+# Step 4.5 — Category Management
+
+## Files to add
+Copy the files in `backend/` and `frontend/` into the matching project folders.
+
+## Routes
+1. Open `backend/routes/index.js`.
+2. Add `snippets/routes-import.js` with the other controller imports.
+3. Add `snippets/routes-entries.js` inside the existing `routes` object, near the other admin routes. Keep commas between entries.
+4. Do not replace the whole route file.
+
 Destination names are unique. Duplicate names return HTTP 409. A destination linked to packages cannot be deleted and returns HTTP 409. All SQL uses parameterized values. No schema migration is required.

@@ -35,7 +35,7 @@ const {
   updateProviderStatus: updateAdminProviderStatus,
 } = require('../controllers/adminProviderController');
 
-// Step 4.4: Admin destination management
+// Admin destination management
 const {
   getDestinations: getAdminDestinations,
   getDestinationDetails: getAdminDestinationDetails,
@@ -43,6 +43,15 @@ const {
   updateDestination: updateAdminDestination,
   deleteDestination: deleteAdminDestination,
 } = require('../controllers/adminDestinationController');
+
+// Step 4.5: Admin category management
+const {
+  getAdminCategories,
+  getAdminCategoryDetails,
+  createAdminCategory,
+  updateAdminCategory,
+  deleteAdminCategory,
+} = require('../controllers/adminCategoryController');
 
 const {
   requireAuth,
@@ -160,6 +169,32 @@ const routes = {
   'DELETE /api/admin/destinations/:id': requireRole(
     ['ADMIN', 'SUPER_ADMIN'],
     deleteAdminDestination
+  ),
+
+  // Admin category management
+  'GET /api/admin/categories': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    getAdminCategories
+  ),
+
+  'GET /api/admin/categories/:id': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    getAdminCategoryDetails
+  ),
+
+  'POST /api/admin/categories': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    createAdminCategory
+  ),
+
+  'PUT /api/admin/categories/:id': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    updateAdminCategory
+  ),
+
+  'DELETE /api/admin/categories/:id': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    deleteAdminCategory
   ),
 
   // Provider dashboard
