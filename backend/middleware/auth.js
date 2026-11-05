@@ -1,6 +1,7 @@
 const { verifyToken } = require('../utils/token');
 const { fail } = require('../utils/response');
 const { getUserById } = require('../services/authService');
+const { hasPermission } = require('../services/permissionService');
 
 function requireAuth(handler) {
   return async function (req, res) {
@@ -58,4 +59,14 @@ function requireApprovedProvider(handler) {
   });
 }
 
-module.exports = { requireAuth, requireRole, requireApprovedProvider };
+// ADMIN accounts need the named permission (granted by a super admin); SUPER_ADMIN always passes.
+function requirePermission(permission, handler) {
+  return requireRole(['ADMIN', 'SUPER_ADMIN'], async function (req, res) {
+    if (!(await hasPermission(req.user, permission))) {
+      return fail(res, 403, 'You do not have permission to perform this action');
+    }
+    return await handler(req, res);
+  });
+}
+
+module.exports = { requireAuth, requireRole, requireApprovedProvider, requirePermission };

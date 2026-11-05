@@ -230,9 +230,27 @@ async function cancelBooking({ customerId, bookingId }) {
   }
 }
 
+/**
+ * Persists the COMPLETED status for CONFIRMED bookings whose trip has ended
+ * (current date >= start_date + duration_days, the same rule the customer view and reviews use).
+ * Keeps admin and provider statistics, which read the stored status, accurate. Returns the number updated.
+ */
+async function completePastBookings() {
+  const [result] = await pool.execute(
+    `UPDATE bookings b
+       JOIN package_departures pd ON pd.id = b.departure_id
+       JOIN packages p ON p.id = pd.package_id
+        SET b.status = 'COMPLETED'
+      WHERE b.status = 'CONFIRMED'
+        AND CURDATE() >= DATE_ADD(pd.start_date, INTERVAL p.duration_days DAY)`
+  );
+  return result.affectedRows;
+}
+
 module.exports = {
   createBooking,
   getCustomerBookings,
   cancelBooking,
+  completePastBookings,
 };
 

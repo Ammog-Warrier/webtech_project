@@ -4,7 +4,9 @@ const routes = require('./routes');
 const { serveStatic } = require('./middleware/static');
 const { fail } = require('./utils/response');
 const { matchRoute } = require('./utils/matchRoute');
+const { isBlockedByMaintenance } = require('./middleware/maintenance');
 const { testConnection } = require('./config/db');
+const { completePastBookings } = require('./services/bookingService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -13,6 +15,9 @@ const server = http.createServer(async (req, res) => {
     const { pathname } = new URL(req.url, `http://${req.headers.host}`);
 
     if (pathname.startsWith('/api/')) {
+      if (await isBlockedByMaintenance(req, pathname)) {
+        return fail(res, 503, 'The site is under maintenance. Please try again later.');
+      }
       const match = matchRoute(routes, req.method, pathname);
       if (!match) return fail(res, 404, 'API route not found');
       req.params = match.params;
@@ -26,6 +31,10 @@ const server = http.createServer(async (req, res) => {
     }
   } catch (err) {
     // Centralized error handling
+    if (err instanceof URIError) {
+      if (res.headersSent) return res.end();
+      return fail(res, 400, 'Malformed URL');
+    }
     console.error(err);
     if (res.headersSent) return res.end();
     fail(res, err.status || 500, err.status ? err.message : 'Internal server error');
@@ -36,4 +45,9 @@ server.listen(PORT, async () => {
   console.log(`Server running at http://localhost:${PORT}`);
   if (await testConnection()) console.log('Database connected');
   else console.warn('Database NOT connected - check .env and MySQL');
+
+  // Mark finished trips as COMPLETED now and then every hour
+  const sweep = () => completePastBookings().catch((err) => console.error('Booking sweep failed:', err.message));
+  sweep();
+  setInterval(sweep, 60 * 60 * 1000).unref();
 });

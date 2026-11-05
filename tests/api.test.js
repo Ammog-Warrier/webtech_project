@@ -1,0 +1,984 @@
+// End-to-end API checks. Plain Node (no framework), run against a running server:
+//   npm start            (in one terminal)
+//   npm run test:api     (in another; set TEST_BASE_URL if the server is not on port 3000)
+// Uses the demo accounts from database/seed.sql. Test data is removed at the end.
+require('dotenv').config({ quiet: true });
+const { pool } = require('../backend/config/db');
+
+const BASE = process.env.TEST_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+const PASSWORD = 'Demo@1234';
+const RUN = Date.now().toString(36);
+
+let passed = 0;
+let failed = 0;
+const sections = [];
+const cleanups = [];
+
+function section(name, fn) {
+  sections.push({ name, fn });
+}
+
+function check(name, condition, extra) {
+  if (condition) {
+    passed += 1;
+    console.log(`  ok   ${name}`);
+  } else {
+    failed += 1;
+    console.log(`  FAIL ${name}${extra === undefined ? '' : ` -> ${JSON.stringify(extra)}`}`);
+  }
+}
+
+async function api(method, path, { token, body, raw } = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    // raw sends the text as is (used to test malformed JSON)
+    body: raw !== undefined ? raw : (body === undefined ? undefined : JSON.stringify(body)),
+  });
+  let json = null;
+  try { json = await res.json(); } catch { /* non-JSON response */ }
+  return { status: res.status, body: json, data: json && json.data, error: json && json.error };
+}
+
+async function login(email, password = PASSWORD) {
+  const res = await api('POST', '/api/auth/login', { body: { email, password } });
+  if (res.status !== 200) throw new Error(`Login failed for ${email}: ${res.status}`);
+  return res.data.token;
+}
+
+async function tokens() {
+  return {
+    customer: await login('customer@example.com'),
+    provider: await login('provider@example.com'),
+    admin: await login('admin@example.com'),
+    superadmin: await login('superadmin@example.com'),
+  };
+}
+
+// ---------------------------------------------------------------------------
+section('Admin package moderation', async (t) => {
+  const none = await api('GET', '/api/admin/packages');
+  check('no token -> 401', none.status === 401);
+  check('customer -> 403', (await api('GET', '/api/admin/packages', { token: t.customer })).status === 403);
+  check('provider -> 403', (await api('GET', '/api/admin/packages', { token: t.provider })).status === 403);
+
+  const title = `Moderation Test ${RUN}`;
+  const created = await api('POST', '/api/provider/packages', {
+    token: t.provider,
+    body: {
+      title, description: 'Test package', destination_id: 1, price: 99, duration_days: 2,
+      max_group_size: 5, image_url: '/assets/img/cities.jpg',
+    },
+  });
+  check('provider creates package -> 201/200 and PENDING', created.status < 300 && created.data.status === 'PENDING', created.body);
+  const id = created.data.id;
+  cleanups.push(() => pool.execute('DELETE FROM packages WHERE id = ?', [id]));
+
+  const pending = await api('GET', '/api/admin/packages?status=PENDING', { token: t.admin });
+  check('admin lists PENDING packages', pending.status === 200 && pending.data.some((p) => p.id === id));
+  check('list rows include provider name', pending.data.find((p) => p.id === id).provider_name === 'Demo Provider');
+  check('invalid status filter -> 400', (await api('GET', '/api/admin/packages?status=NOPE', { token: t.admin })).status === 400);
+
+  const paged = await api('GET', '/api/admin/packages?page=1&limit=2', { token: t.admin });
+  check('pagination shape', paged.status === 200 && Array.isArray(paged.data.items) && paged.data.items.length <= 2 && paged.data.total >= 1 && paged.data.limit === 2, paged.body);
+  check('page=0 -> 400', (await api('GET', '/api/admin/packages?page=0', { token: t.admin })).status === 400);
+  check('limit=1000 -> 400', (await api('GET', '/api/admin/packages?limit=1000', { token: t.admin })).status === 400);
+
+  const search = await api('GET', `/api/admin/packages?search=${encodeURIComponent(title)}`, { token: t.superadmin });
+  check('search by title (super admin allowed)', search.status === 200 && search.data.length === 1);
+
+  const detail = await api('GET', `/api/admin/packages/${id}`, { token: t.admin });
+  check('detail returns itinerary fields', detail.status === 200 && 'itinerary' in detail.data && detail.data.title === title);
+  check('detail bad id -> 400', (await api('GET', '/api/admin/packages/abc', { token: t.admin })).status === 400);
+  check('detail missing -> 404', (await api('GET', '/api/admin/packages/999999', { token: t.admin })).status === 404);
+
+  const bad = await api('PATCH', `/api/admin/packages/${id}/status`, { token: t.admin, body: { status: 'ARCHIVED' } });
+  check('invalid status value -> 400', bad.status === 400);
+  const miss = await api('PATCH', '/api/admin/packages/999999/status', { token: t.admin, body: { status: 'APPROVED' } });
+  check('moderate missing package -> 404', miss.status === 404);
+
+  const rejected = await api('PATCH', `/api/admin/packages/${id}/status`, {
+    token: t.admin, body: { status: 'REJECTED', rejection_reason: 'Needs a better description' },
+  });
+  check('reject with reason', rejected.status === 200 && rejected.data.status === 'REJECTED' && rejected.data.rejection_reason === 'Needs a better description', rejected.body);
+  const mine = await api('GET', '/api/provider/packages', { token: t.provider });
+  check('provider sees rejection reason', mine.data.find((p) => p.id === id).rejection_reason === 'Needs a better description');
+  const hidden = await api('GET', '/api/packages');
+  check('rejected package is not public', !hidden.data.some((p) => p.id === id));
+
+  const approved = await api('PATCH', `/api/admin/packages/${id}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+  check('approve clears reason', approved.status === 200 && approved.data.status === 'APPROVED' && approved.data.rejection_reason === null, approved.body);
+  const visible = await api('GET', '/api/packages');
+  check('approved package is public', visible.data.some((p) => p.id === id));
+
+  const edit = await api('PUT', `/api/provider/packages/${id}`, {
+    token: t.provider,
+    body: { title, description: 'Edited', destination_id: 1, price: 99, duration_days: 2, max_group_size: 5, image_url: '/assets/img/cities.jpg' },
+  });
+  check('provider edit resets to PENDING', edit.status === 200 && edit.data.status === 'PENDING', edit.body);
+
+  await api('DELETE', `/api/provider/packages/${id}`, { token: t.provider });
+  const archived = await api('PATCH', `/api/admin/packages/${id}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+  check('archived package cannot be moderated -> 409', archived.status === 409, archived.body);
+});
+
+// Creates a customer booking through the API and registers its cleanup.
+async function makeBooking(t, { pay = false, guests = 1, packageId = 1, earliest = false } = {}) {
+  const deps = await api('GET', `/api/packages/${packageId}/departures`);
+  const departure = earliest ? deps.data[0] : deps.data[deps.data.length - 1];
+  const created = await api('POST', '/api/bookings', {
+    token: t.customer, body: { departure_id: departure.id, num_guests: guests },
+  });
+  if (created.status >= 300) throw new Error(`Booking failed: ${JSON.stringify(created.body)}`);
+  const id = created.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM reviews WHERE booking_id = ?', [id]);
+    await pool.execute('DELETE FROM payments WHERE booking_id = ?', [id]);
+    await pool.execute('DELETE FROM bookings WHERE id = ?', [id]);
+  });
+  if (pay) {
+    const paid = await api('POST', `/api/bookings/${id}/pay`, { token: t.customer, body: { method: 'UPI' } });
+    if (paid.status >= 300) throw new Error(`Payment failed: ${JSON.stringify(paid.body)}`);
+  }
+  return { id, departure };
+}
+
+section('Admin booking monitoring', async (t) => {
+  check('no token -> 401', (await api('GET', '/api/admin/bookings')).status === 401);
+  check('customer -> 403', (await api('GET', '/api/admin/bookings', { token: t.customer })).status === 403);
+  check('provider -> 403', (await api('GET', '/api/admin/bookings', { token: t.provider })).status === 403);
+  check('customer -> 403 on detail', (await api('GET', '/api/admin/bookings/1', { token: t.customer })).status === 403);
+
+  const paid = await makeBooking(t, { pay: true, guests: 2 });
+  const pending = await makeBooking(t, { pay: false });
+  const cancelled = await makeBooking(t, { pay: true });
+  const cancel = await api('POST', `/api/bookings/${cancelled.id}/cancel`, { token: t.customer });
+  check('setup: cancel refunds payment', cancel.status === 200, cancel.body);
+
+  const all = await api('GET', '/api/admin/bookings', { token: t.admin });
+  check('admin lists all bookings', all.status === 200 && [paid, pending, cancelled].every((b) => all.data.some((x) => x.id === b.id)));
+  const row = all.data.find((x) => x.id === paid.id);
+  check('row has customer, package, provider and payment', row.customer_email === 'customer@example.com' && row.package_title && row.provider_name === 'Demo Provider' && row.payment_status === 'PAID' && row.status === 'CONFIRMED', row);
+
+  const byStatus = await api('GET', '/api/admin/bookings?status=CANCELLED', { token: t.admin });
+  check('status filter', byStatus.data.every((x) => x.status === 'CANCELLED') && byStatus.data.some((x) => x.id === cancelled.id));
+  const unpaid = await api('GET', '/api/admin/bookings?payment_status=UNPAID', { token: t.admin });
+  check('payment_status=UNPAID filter', unpaid.data.some((x) => x.id === pending.id) && unpaid.data.every((x) => x.payment_status === 'UNPAID'));
+  const refunded = await api('GET', '/api/admin/bookings?payment_status=REFUNDED', { token: t.admin });
+  check('payment_status=REFUNDED filter', refunded.data.some((x) => x.id === cancelled.id));
+  const search = await api('GET', '/api/admin/bookings?search=customer@example.com', { token: t.superadmin });
+  check('search by email (super admin allowed)', search.status === 200 && search.data.length >= 3);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const range = await api('GET', `/api/admin/bookings?from=${today}&to=${today}`, { token: t.admin });
+  check('date range filter includes today\'s bookings', range.status === 200 && range.data.some((x) => x.id === paid.id));
+  const future = await api('GET', '/api/admin/bookings?from=2999-01-01', { token: t.admin });
+  check('future range is empty', future.status === 200 && future.data.length === 0);
+  check('bad date -> 400', (await api('GET', '/api/admin/bookings?from=2026-13-40', { token: t.admin })).status === 400);
+  check('from after to -> 400', (await api('GET', '/api/admin/bookings?from=2026-05-02&to=2026-05-01', { token: t.admin })).status === 400);
+  check('bad status -> 400', (await api('GET', '/api/admin/bookings?status=X', { token: t.admin })).status === 400);
+  check('bad payment_status -> 400', (await api('GET', '/api/admin/bookings?payment_status=X', { token: t.admin })).status === 400);
+  const paged = await api('GET', '/api/admin/bookings?page=1&limit=2', { token: t.admin });
+  check('pagination', paged.status === 200 && paged.data.items.length === 2 && paged.data.total >= 3);
+
+  const detail = await api('GET', `/api/admin/bookings/${paid.id}`, { token: t.admin });
+  check('detail', detail.status === 200 && detail.data.id === paid.id && detail.data.num_guests === 2);
+  check('detail bad id -> 400', (await api('GET', '/api/admin/bookings/x', { token: t.admin })).status === 400);
+  check('detail missing -> 404', (await api('GET', '/api/admin/bookings/99999999', { token: t.admin })).status === 404);
+  const write = await api('POST', `/api/admin/bookings/${paid.id}/cancel`, { token: t.admin });
+  check('admin cannot modify bookings (no write route)', write.status === 404);
+});
+
+section('Admin reports, net revenue and pagination', async (t) => {
+  check('reports: no token -> 401', (await api('GET', '/api/admin/reports')).status === 401);
+  check('reports: customer -> 403', (await api('GET', '/api/admin/reports', { token: t.customer })).status === 403);
+  check('reports: provider -> 403', (await api('GET', '/api/admin/reports', { token: t.provider })).status === 403);
+  check('reports: bad date -> 400', (await api('GET', '/api/admin/reports?from=nope', { token: t.admin })).status === 400);
+  check('reports: from after to -> 400', (await api('GET', '/api/admin/reports?from=2026-02-01&to=2026-01-01', { token: t.admin })).status === 400);
+
+  const future = await api('GET', '/api/admin/reports?from=2999-01-01', { token: t.admin });
+  check('reports: empty range has zero totals and empty lists', future.status === 200 && future.data.summary.total_bookings === 0 && future.data.summary.paid_total === 0 && future.data.monthly.length === 0 && future.data.top_packages.length === 0, future.body);
+
+  const before = (await api('GET', '/api/admin/reports', { token: t.superadmin })).data;
+  const paid = await makeBooking(t, { pay: true, guests: 2 });
+  const cancelled = await makeBooking(t, { pay: true, guests: 1, packageId: 2 });
+  await api('POST', `/api/bookings/${cancelled.id}/cancel`, { token: t.customer });
+  await makeBooking(t, { pay: false });
+  const paidPrice = (await api('GET', `/api/admin/bookings/${paid.id}`, { token: t.admin })).data.total_price;
+  const refundPrice = (await api('GET', `/api/admin/bookings/${cancelled.id}`, { token: t.admin })).data.total_price;
+
+  const after = (await api('GET', '/api/admin/reports', { token: t.admin })).data;
+  const diff = (key) => Math.round((after.summary[key] - before.summary[key]) * 100) / 100;
+  check('report counts the 3 new bookings', diff('total_bookings') === 3, diff('total_bookings'));
+  check('report counts 1 cancelled and 1 pending', diff('cancelled_bookings') === 1 && diff('pending_bookings') === 1);
+  check('report paid_total grows by the paid booking', diff('paid_total') === Number(paidPrice), diff('paid_total'));
+  check('report refunded_total grows by the refund', diff('refunded_total') === Number(refundPrice), diff('refunded_total'));
+  check('net_total equals paid_total (refunds are not subtracted twice)', after.summary.net_total === after.summary.paid_total);
+  check('gross_total = paid + refunded', Math.abs(after.summary.gross_total - (after.summary.paid_total + after.summary.refunded_total)) < 0.001);
+  check('report has all sections', ['monthly', 'top_packages', 'top_providers', 'destinations', 'categories'].every((k) => Array.isArray(after[k])) && after.catalogue.APPROVED >= 1);
+  check('top package/provider rows have names', after.top_packages[0].package_title && after.top_providers[0].provider_name);
+
+  const dash = await api('GET', '/api/admin/dashboard', { token: t.admin });
+  check('dashboard net_collected equals paid_revenue', dash.data.net_collected === dash.data.paid_revenue, dash.data);
+  const fin = await api('GET', '/api/provider/finance', { token: t.provider });
+  check('provider finance net_total equals paid_total', fin.status === 200 && fin.data.summary.refunded_total > 0 && fin.data.summary.net_total === fin.data.summary.paid_total, fin.body && fin.data.summary);
+  const prep = await api('GET', '/api/provider/reports', { token: t.provider });
+  check('provider report net_total equals paid_total', prep.status === 200 && prep.data.summary.net_total === prep.data.summary.paid_total);
+
+  for (const path of ['customers', 'providers', 'destinations', 'categories']) {
+    const url = `/api/admin/${path}`;
+    const plain = await api('GET', url, { token: t.admin });
+    check(`${path}: default response is still an array`, plain.status === 200 && Array.isArray(plain.data));
+    const paged = await api('GET', `${url}?page=1&limit=1`, { token: t.admin });
+    check(`${path}: ?page&limit returns pagination envelope`, paged.status === 200 && paged.data.items.length === 1 && paged.data.total === plain.data.length && paged.data.total_pages === plain.data.length, paged.body);
+    check(`${path}: bad page -> 400`, (await api('GET', `${url}?page=abc`, { token: t.admin })).status === 400);
+  }
+  const beyond = await api('GET', '/api/admin/categories?page=99&limit=5', { token: t.admin });
+  check('page beyond the end -> empty items', beyond.status === 200 && beyond.data.items.length === 0);
+  const cat = await api('GET', '/api/admin/categories?search=Adventure', { token: t.admin });
+  check('category search works', cat.status === 200 && cat.data.length === 1 && cat.data[0].name === 'Adventure', cat.body);
+});
+
+section('Super admin: admin accounts', async (t) => {
+  const url = '/api/superadmin/admins';
+  check('no token -> 401', (await api('GET', url)).status === 401);
+  check('customer -> 403', (await api('GET', url, { token: t.customer })).status === 403);
+  check('provider -> 403', (await api('GET', url, { token: t.provider })).status === 403);
+  check('admin -> 403 (list)', (await api('GET', url, { token: t.admin })).status === 403);
+  check('admin -> 403 (create)', (await api('POST', url, { token: t.admin, body: {} })).status === 403);
+
+  const email = `new.admin.${RUN}@example.com`;
+  const good = { full_name: 'Test Admin', email, phone: '9876543210', password: 'Secret@123' };
+  check('missing name -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, full_name: '' } })).status === 400);
+  check('bad email -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, email: 'nope' } })).status === 400);
+  check('short password -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, password: 'short' } })).status === 400);
+  check('missing password -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, password: undefined } })).status === 400);
+  check('bad phone -> 400', (await api('POST', url, { token: t.superadmin, body: { ...good, phone: 'abc' } })).status === 400);
+
+  const created = await api('POST', url, { token: t.superadmin, body: good });
+  check('create admin -> 201', created.status === 201 && created.data.email === email && created.data.is_active === 1, created.body);
+  check('response never contains a password hash', !JSON.stringify(created.body).includes('password'));
+  const id = created.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM audit_logs WHERE user_id = ?', [id]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+  });
+  check('duplicate email -> 409', (await api('POST', url, { token: t.superadmin, body: good })).status === 409);
+
+  const loggedIn = await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } });
+  check('new admin can log in with the ADMIN role', loggedIn.status === 200 && loggedIn.data.user.role === 'ADMIN', loggedIn.body);
+  const adminToken = loggedIn.data.token;
+
+  const list = await api('GET', `${url}?search=${encodeURIComponent(email)}`, { token: t.superadmin });
+  check('list + search finds it', list.status === 200 && list.data.length === 1 && list.data[0].id === id);
+  const all = await api('GET', url, { token: t.superadmin });
+  check('list only contains ADMIN accounts', all.data.every((a) => a.email !== 'superadmin@example.com' && a.email !== 'customer@example.com') && all.data.some((a) => a.email === 'admin@example.com'));
+  check('invalid status filter -> 400', (await api('GET', `${url}?status=X`, { token: t.superadmin })).status === 400);
+  check('status=ACTIVE filter', (await api('GET', `${url}?status=ACTIVE`, { token: t.superadmin })).data.some((a) => a.id === id));
+  const paged = await api('GET', `${url}?page=1&limit=1`, { token: t.superadmin });
+  check('pagination', paged.status === 200 && paged.data.items.length === 1 && paged.data.total === all.data.length);
+
+  const one = await api('GET', `${url}/${id}`, { token: t.superadmin });
+  check('detail', one.status === 200 && one.data.full_name === 'Test Admin');
+  check('detail bad id -> 400', (await api('GET', `${url}/abc`, { token: t.superadmin })).status === 400);
+  check('detail missing -> 404', (await api('GET', `${url}/99999999`, { token: t.superadmin })).status === 404);
+  check('customer id is not reachable here -> 404', (await api('GET', `${url}/1`, { token: t.superadmin })).status === 404);
+  check('super admin id is not reachable here -> 404', (await api('GET', `${url}/4`, { token: t.superadmin })).status === 404);
+  check('cannot disable a super admin here -> 404', (await api('PATCH', `${url}/4/status`, { token: t.superadmin, body: { is_active: false } })).status === 404);
+  check('cannot delete a super admin here -> 404', (await api('DELETE', `${url}/4`, { token: t.superadmin })).status === 404);
+  check('cannot delete a customer here -> 404', (await api('DELETE', `${url}/1`, { token: t.superadmin })).status === 404);
+
+  const edited = await api('PUT', `${url}/${id}`, { token: t.superadmin, body: { full_name: 'Renamed Admin', email, phone: '' } });
+  check('update keeps password when none given', edited.status === 200 && edited.data.full_name === 'Renamed Admin' && edited.data.phone === null);
+  check('old password still works', (await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } })).status === 200);
+  check('update to an existing email -> 409', (await api('PUT', `${url}/${id}`, { token: t.superadmin, body: { full_name: 'X', email: 'customer@example.com' } })).status === 409);
+  check('update bad body -> 400', (await api('PUT', `${url}/${id}`, { token: t.superadmin, body: { full_name: '' } })).status === 400);
+  await api('PUT', `${url}/${id}`, { token: t.superadmin, body: { full_name: 'Renamed Admin', email, password: 'Changed@456' } });
+  check('password reset: old password rejected', (await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } })).status === 401);
+  check('password reset: new password works', (await api('POST', '/api/auth/login', { body: { email, password: 'Changed@456' } })).status === 200);
+
+  check('status needs a boolean -> 400', (await api('PATCH', `${url}/${id}/status`, { token: t.superadmin, body: { is_active: 'no' } })).status === 400);
+  const off = await api('PATCH', `${url}/${id}/status`, { token: t.superadmin, body: { is_active: false } });
+  check('disable admin', off.status === 200 && off.data.is_active === 0);
+  check('disabled admin cannot log in -> 403', (await api('POST', '/api/auth/login', { body: { email, password: 'Changed@456' } })).status === 403);
+  check('disabled admin existing token stops working -> 403', (await api('GET', '/api/auth/me', { token: adminToken })).status === 403);
+  check('status=DISABLED filter', (await api('GET', `${url}?status=DISABLED`, { token: t.superadmin })).data.some((a) => a.id === id));
+  const on = await api('PATCH', `${url}/${id}/status`, { token: t.superadmin, body: { is_active: true } });
+  check('re-enable admin', on.status === 200 && on.data.is_active === 1);
+
+  await pool.execute("INSERT INTO audit_logs (user_id, action, entity, entity_id, details) VALUES (?, 'TEST', 'users', ?, 'history')", [id, id]);
+  const blocked = await api('DELETE', `${url}/${id}`, { token: t.superadmin });
+  check('admin with activity cannot be deleted -> 409', blocked.status === 409, blocked.body);
+  await pool.execute('DELETE FROM audit_logs WHERE user_id = ?', [id]);
+  const deleted = await api('DELETE', `${url}/${id}`, { token: t.superadmin });
+  check('admin without activity can be deleted', deleted.status === 200, deleted.body);
+  check('deleted admin is gone -> 404', (await api('GET', `${url}/${id}`, { token: t.superadmin })).status === 404);
+});
+
+section('Admin permissions', async (t) => {
+  const url = '/api/superadmin/admins';
+  const list = await api('GET', '/api/superadmin/permissions', { token: t.superadmin });
+  const names = list.data.map((x) => x.name);
+  check('permission list', list.status === 200 && names.length === 6 && names.includes('MODERATE_PACKAGES') && list.data.every((x) => x.description));
+  check('admin cannot read the permission list -> 403', (await api('GET', '/api/superadmin/permissions', { token: t.admin })).status === 403);
+
+  const me = await api('GET', '/api/auth/me', { token: t.admin });
+  check('demo admin has every permission in /api/auth/me', me.status === 200 && me.data.permissions.length === 6, me.body);
+  const meSuper = await api('GET', '/api/auth/me', { token: t.superadmin });
+  check('super admin /me lists every permission', meSuper.data.permissions.length === 6);
+  check('customer /me has no permissions field', (await api('GET', '/api/auth/me', { token: t.customer })).data.permissions === undefined);
+
+  const email = `perm.admin.${RUN}@example.com`;
+  const pw = 'Secret@123';
+  const bad = await api('POST', url, { token: t.superadmin, body: { full_name: 'P', email, password: pw, permissions: ['NOPE'] } });
+  check('create with unknown permission -> 400', bad.status === 400);
+  check('create with non-array permissions -> 400', (await api('POST', url, { token: t.superadmin, body: { full_name: 'P', email, password: pw, permissions: 'MANAGE_CUSTOMERS' } })).status === 400);
+
+  const created = await api('POST', url, { token: t.superadmin, body: { full_name: 'Perm Admin', email, password: pw, permissions: ['MANAGE_CUSTOMERS', 'MANAGE_CUSTOMERS'] } });
+  check('create with permissions (duplicates removed)', created.status === 201 && JSON.stringify(created.data.permissions) === '["MANAGE_CUSTOMERS"]', created.body);
+  const id = created.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM audit_logs WHERE user_id = ?', [id]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+  });
+  const token = await login(email, pw);
+
+  const meNew = await api('GET', '/api/auth/me', { token });
+  check('new admin /me shows its permissions', JSON.stringify(meNew.data.permissions) === '["MANAGE_CUSTOMERS"]');
+  check('allowed: customers', (await api('GET', '/api/admin/customers', { token })).status === 200);
+  check('allowed: dashboard needs no permission', (await api('GET', '/api/admin/dashboard', { token })).status === 200);
+  for (const [path, perm] of [['providers', 'MANAGE_PROVIDERS'], ['packages', 'MODERATE_PACKAGES'], ['destinations', 'MANAGE_CATALOGUE'], ['categories', 'MANAGE_CATALOGUE'], ['bookings', 'VIEW_BOOKINGS'], ['reports', 'VIEW_REPORTS']]) {
+    const res = await api('GET', `/api/admin/${path}`, { token });
+    check(`denied without ${perm}: GET /${path} -> 403`, res.status === 403, res.body);
+  }
+  check('denied: writing a category -> 403', (await api('POST', '/api/admin/categories', { token, body: { name: `X${RUN}`, description: '' } })).status === 403);
+  check('denied: moderating a package -> 403', (await api('PATCH', '/api/admin/packages/1/status', { token, body: { status: 'APPROVED' } })).status === 403);
+  check('denied: provider status -> 403', (await api('PATCH', '/api/admin/providers/2/status', { token, body: { is_active: true } })).status === 403);
+  check('permissions do not open super admin routes -> 403', (await api('GET', url, { token })).status === 403);
+
+  const got = await api('GET', `${url}/${id}/permissions`, { token: t.superadmin });
+  check('read permissions', got.status === 200 && got.data.permissions.length === 1);
+  check('read permissions bad id -> 400', (await api('GET', `${url}/x/permissions`, { token: t.superadmin })).status === 400);
+  check('read permissions of a non-admin -> 404', (await api('GET', `${url}/1/permissions`, { token: t.superadmin })).status === 404);
+  check('replace: unknown name -> 400', (await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: { permissions: ['MANAGE_CUSTOMERS', 'NOPE'] } })).status === 400);
+  check('replace: not an array -> 400', (await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: { permissions: 5 } })).status === 400);
+  check('replace: missing body field -> 400', (await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: {} })).status === 400);
+  check('replace: non-admin -> 404', (await api('PUT', `${url}/1/permissions`, { token: t.superadmin, body: { permissions: [] } })).status === 404);
+  check('admin cannot change permissions -> 403', (await api('PUT', `${url}/${id}/permissions`, { token: t.admin, body: { permissions: names } })).status === 403);
+  check('admin cannot change own permissions -> 403', (await api('PUT', `${url}/3/permissions`, { token: t.admin, body: { permissions: [] } })).status === 403);
+
+  const put = await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: { permissions: ['MODERATE_PACKAGES', 'VIEW_REPORTS'] } });
+  check('replace permissions', put.status === 200 && JSON.stringify(put.data.permissions) === '["MODERATE_PACKAGES","VIEW_REPORTS"]', put.body);
+  check('change takes effect immediately: packages now 200', (await api('GET', '/api/admin/packages', { token })).status === 200);
+  check('change takes effect immediately: reports now 200', (await api('GET', '/api/admin/reports', { token })).status === 200);
+  check('revoked permission: customers now 403', (await api('GET', '/api/admin/customers', { token })).status === 403);
+  check('list shows permission_count', (await api('GET', `${url}/${id}`, { token: t.superadmin })).data.permission_count === 2);
+
+  const none = await api('PUT', `${url}/${id}/permissions`, { token: t.superadmin, body: { permissions: [] } });
+  check('empty array revokes everything', none.status === 200 && none.data.permissions.length === 0);
+  check('no permissions: packages 403', (await api('GET', '/api/admin/packages', { token })).status === 403);
+
+  const bare = await api('POST', url, { token: t.superadmin, body: { full_name: 'Bare', email: `bare.${RUN}@example.com`, password: pw } });
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM audit_logs WHERE user_id = ?', [bare.data.id]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [bare.data.id]);
+  });
+  check('admin created without permissions starts with none (least privilege)', bare.status === 201 && bare.data.permissions.length === 0);
+
+  check('super admin passes every permission check', (await Promise.all(['customers', 'providers', 'packages', 'destinations', 'categories', 'bookings', 'reports'].map((x) => api('GET', `/api/admin/${x}`, { token: t.superadmin })))).every((r) => r.status === 200));
+});
+
+section('Super admin: logs viewer', async (t) => {
+  const url = '/api/superadmin/logs';
+  check('no token -> 401', (await api('GET', url)).status === 401);
+  check('customer -> 403', (await api('GET', url, { token: t.customer })).status === 403);
+  check('provider -> 403', (await api('GET', url, { token: t.provider })).status === 403);
+  check('admin -> 403', (await api('GET', url, { token: t.admin })).status === 403);
+
+  // Produce known log entries: one by the super admin, one by the demo admin
+  const name = `LogTest ${RUN}`;
+  const made = await api('POST', '/api/admin/categories', { token: t.superadmin, body: { name, description: 'log test' } });
+  cleanups.push(() => pool.execute('DELETE FROM categories WHERE id = ?', [made.data.id]));
+  await api('PUT', `/api/admin/categories/${made.data.id}`, { token: t.admin, body: { name, description: 'edited' } });
+
+  const logs = await api('GET', `${url}?search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('logs list (paginated envelope by default)', logs.status === 200 && Array.isArray(logs.data.items) && logs.data.limit === 20 && logs.data.total === 2, logs.body);
+  const [newest, oldest] = logs.data.items;
+  check('newest first', newest.action === 'CATEGORY_UPDATED' && oldest.action === 'CATEGORY_CREATED');
+  check('entry has actor, role, entity and details', oldest.user_email === 'superadmin@example.com' && oldest.user_role === 'SUPER_ADMIN' && oldest.entity === 'categories' && oldest.entity_id === made.data.id && oldest.details === name && /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(oldest.created_at), oldest);
+  check('updated entry was written by the admin', newest.user_email === 'admin@example.com');
+
+  const byAction = await api('GET', `${url}?action=category_created&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('action filter (case-insensitive)', byAction.data.total === 1 && byAction.data.items[0].action === 'CATEGORY_CREATED');
+  const byUser = await api('GET', `${url}?user_id=${newest.user_id}&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('user_id filter', byUser.data.total === 1 && byUser.data.items[0].user_email === 'admin@example.com');
+  const byEntity = await api('GET', `${url}?entity=categories&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('entity filter', byEntity.data.total === 2);
+  const none = await api('GET', `${url}?entity=destinations&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('entity filter excludes others', none.data.total === 0 && none.data.items.length === 0);
+  const byActor = await api('GET', `${url}?search=admin@example.com&action=CATEGORY_UPDATED`, { token: t.superadmin });
+  check('search matches actor email', byActor.data.items.some((x) => x.details === name));
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  check('date range includes today', (await api('GET', `${url}?from=${today}&to=${today}&search=${encodeURIComponent(name)}`, { token: t.superadmin })).data.total === 2);
+  check('future range is empty', (await api('GET', `${url}?from=2999-01-01`, { token: t.superadmin })).data.total === 0);
+
+  const page1 = await api('GET', `${url}?limit=1&page=1&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  const page2 = await api('GET', `${url}?limit=1&page=2&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('pagination pages differ', page1.data.items.length === 1 && page2.data.items.length === 1 && page1.data.items[0].id !== page2.data.items[0].id && page1.data.total_pages === 2);
+  check('page past the end is empty', (await api('GET', `${url}?limit=1&page=9&search=${encodeURIComponent(name)}`, { token: t.superadmin })).data.items.length === 0);
+  check('limit too large -> 400', (await api('GET', `${url}?limit=1000`, { token: t.superadmin })).status === 400);
+  check('bad user_id -> 400', (await api('GET', `${url}?user_id=abc`, { token: t.superadmin })).status === 400);
+  check('bad date -> 400', (await api('GET', `${url}?from=yesterday`, { token: t.superadmin })).status === 400);
+  check('search is not an SQL hole', (await api('GET', `${url}?search=${encodeURIComponent("' OR 1=1 --")}`, { token: t.superadmin })).data.total === 0);
+});
+
+section('Super admin: settings', async (t) => {
+  const url = '/api/superadmin/settings';
+  check('no token -> 401', (await api('GET', url)).status === 401);
+  check('admin -> 403 (list)', (await api('GET', url, { token: t.admin })).status === 403);
+  check('admin -> 403 (update)', (await api('PUT', `${url}/maintenance_mode`, { token: t.admin, body: { value: 'true' } })).status === 403);
+  check('customer -> 403', (await api('GET', url, { token: t.customer })).status === 403);
+
+  const list = await api('GET', url, { token: t.superadmin });
+  const original = Object.fromEntries(list.data.map((x) => [x.setting_key, x.setting_value]));
+  check('list has the editable settings', list.status === 200 && 'maintenance_mode' in original && 'booking_cancellation_hours_limit' in original && list.data.every((x) => x.description));
+  const restore = async () => {
+    await pool.execute("UPDATE settings SET setting_value = ? WHERE setting_key = 'maintenance_mode'", [original.maintenance_mode]);
+    await pool.execute("UPDATE settings SET setting_value = ? WHERE setting_key = 'booking_cancellation_hours_limit'", [original.booking_cancellation_hours_limit]);
+  };
+  cleanups.push(restore);
+
+  check('unknown key -> 404', (await api('PUT', `${url}/nope`, { token: t.superadmin, body: { value: 'x' } })).status === 404);
+  check('missing value -> 400', (await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: {} })).status === 400);
+  check('maintenance_mode: invalid -> 400', (await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: { value: 'maybe' } })).status === 400);
+  for (const bad of ['abc', '-1', '1.5', 721, '']) {
+    check(`hours limit ${JSON.stringify(bad)} -> 400`, (await api('PUT', `${url}/booking_cancellation_hours_limit`, { token: t.superadmin, body: { value: bad } })).status === 400);
+  }
+
+  const set = await api('PUT', `${url}/booking_cancellation_hours_limit`, { token: t.superadmin, body: { value: 12 } });
+  check('update hours limit (number accepted, stored as text)', set.status === 200 && set.data.setting_value === '12', set.body);
+  check('boolean accepted for maintenance_mode', (await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: { value: false } })).data.setting_value === 'false');
+
+  // The cancellation limit is really used by the booking flow
+  await api('PUT', `${url}/booking_cancellation_hours_limit`, { token: t.superadmin, body: { value: 720 } });
+  const tooLate = await makeBooking(t, { pay: true, earliest: true, packageId: 3 });
+  const refused = await api('POST', `/api/bookings/${tooLate.id}/cancel`, { token: t.customer });
+  check('limit of 720h blocks cancelling a departure ~3 weeks away', refused.status === 400 && /720 hours/.test(refused.error.message), refused.body);
+  await api('PUT', `${url}/booking_cancellation_hours_limit`, { token: t.superadmin, body: { value: 24 } });
+  const allowed = await api('POST', `/api/bookings/${tooLate.id}/cancel`, { token: t.customer });
+  check('limit of 24h allows the same cancellation', allowed.status === 200, allowed.body);
+
+  // maintenance mode is really enforced
+  const on = await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: { value: 'true' } });
+  check('enable maintenance mode', on.status === 200 && on.data.setting_value === 'true');
+  try {
+    check('public API -> 503', (await api('GET', '/api/packages')).status === 503);
+    check('customer API -> 503', (await api('GET', '/api/bookings/my', { token: t.customer })).status === 503);
+    check('provider API -> 503', (await api('GET', '/api/provider/dashboard', { token: t.provider })).status === 503);
+    check('invalid token -> 503', (await api('GET', '/api/packages', { token: 'garbage' })).status === 503);
+    check('health stays open', (await api('GET', '/api/health')).status === 200);
+    check('login stays open', (await api('POST', '/api/auth/login', { body: { email: 'customer@example.com', password: PASSWORD } })).status === 200);
+    check('admin keeps working', (await api('GET', '/api/admin/dashboard', { token: t.admin })).status === 200);
+    check('super admin keeps working', (await api('GET', url, { token: t.superadmin })).status === 200);
+    check('web pages stay available', (await fetch(`${BASE}/`)).status === 200);
+  } finally {
+    await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: { value: 'false' } });
+  }
+  check('maintenance off: public API works again', (await api('GET', '/api/packages')).status === 200);
+
+  const logs = await api('GET', '/api/superadmin/logs?action=SETTING_UPDATED&limit=100', { token: t.superadmin });
+  check('setting changes are logged with old and new value', logs.data.items.some((x) => x.details === 'maintenance_mode: false -> true'), logs.data.items.slice(0, 3));
+});
+
+section('Customer wishlist', async (t) => {
+  const url = '/api/wishlist';
+  check('no token -> 401', (await api('GET', url)).status === 401);
+  for (const [who, token] of [['provider', t.provider], ['admin', t.admin], ['super admin', t.superadmin]]) {
+    check(`${who} -> 403`, (await api('GET', url, { token })).status === 403);
+  }
+  check('provider cannot add -> 403', (await api('POST', url, { token: t.provider, body: { package_id: 1 } })).status === 403);
+
+  // second customer for isolation checks
+  const otherEmail = `wish.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Wish Tester', email: otherEmail, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const other = await login(otherEmail, 'Secret@123');
+
+  await pool.execute('DELETE FROM wishlists WHERE customer_id = 1');
+  cleanups.push(() => pool.execute('DELETE FROM wishlists WHERE customer_id = 1'));
+  const empty = await api('GET', url, { token: t.customer });
+  check('starts empty', empty.status === 200 && empty.data.length === 0);
+
+  for (const bad of [undefined, 0, -1, 'abc', 1.5]) {
+    check(`package_id ${JSON.stringify(bad)} -> 400`, (await api('POST', url, { token: t.customer, body: { package_id: bad } })).status === 400);
+  }
+  check('unknown package -> 404', (await api('POST', url, { token: t.customer, body: { package_id: 99999999 } })).status === 404);
+
+  const pending = await api('POST', '/api/provider/packages', {
+    token: t.provider,
+    body: { title: `Wish Test ${RUN}`, description: 'd', destination_id: 1, price: 50, duration_days: 1, image_url: '/assets/img/cities.jpg' },
+  });
+  const pid = pending.data.id;
+  cleanups.push(() => pool.execute('DELETE FROM packages WHERE id = ?', [pid]));
+  check('PENDING package cannot be saved -> 404', (await api('POST', url, { token: t.customer, body: { package_id: pid } })).status === 404);
+
+  const first = await api('POST', url, { token: t.customer, body: { package_id: 1 } });
+  check('add -> 201', first.status === 201 && first.data.wishlisted === true, first.body);
+  const again = await api('POST', url, { token: t.customer, body: { package_id: 1 } });
+  check('add again is a no-op -> 200', again.status === 200);
+  await api('POST', url, { token: t.customer, body: { package_id: 2 } });
+
+  const list = await api('GET', url, { token: t.customer });
+  check('list has each package once, newest first', list.data.length === 2 && list.data[0].package_id === 2 && list.data[1].package_id === 1, list.body);
+  const item = list.data[1];
+  check('item has card fields', item.title && item.price && item.duration_days && item.image_url && item.destination_name && item.added_at && 'category_name' in item, item);
+
+  check('other customer has their own empty list', (await api('GET', url, { token: other })).data.length === 0);
+  const foreign = await api('DELETE', `${url}/1`, { token: other });
+  check("other customer's delete does not touch mine", foreign.status === 200 && foreign.data.removed === false && (await api('GET', url, { token: t.customer })).data.length === 2);
+
+  // package visibility follows moderation
+  await api('PATCH', `/api/admin/packages/${pid}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+  await api('POST', url, { token: t.customer, body: { package_id: pid } });
+  check('approved package can be saved', (await api('GET', url, { token: t.customer })).data.some((x) => x.package_id === pid));
+  await api('PATCH', `/api/admin/packages/${pid}/status`, { token: t.admin, body: { status: 'REJECTED' } });
+  check('rejected package disappears from the list', !(await api('GET', url, { token: t.customer })).data.some((x) => x.package_id === pid));
+  await api('PATCH', `/api/admin/packages/${pid}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+  check('and returns when approved again', (await api('GET', url, { token: t.customer })).data.some((x) => x.package_id === pid));
+
+  check('remove bad id -> 400', (await api('DELETE', `${url}/abc`, { token: t.customer })).status === 400);
+  const del = await api('DELETE', `${url}/1`, { token: t.customer });
+  check('remove', del.status === 200 && del.data.removed === true && del.data.wishlisted === false);
+  const delAgain = await api('DELETE', `${url}/1`, { token: t.customer });
+  check('remove again is a no-op -> 200', delAgain.status === 200 && delAgain.data.removed === false);
+  check('list no longer has it', !(await api('GET', url, { token: t.customer })).data.some((x) => x.package_id === 1));
+});
+
+function addDays(date, days) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+section('Booking calendar', async (t) => {
+  const first = (await api('GET', '/api/packages/1/departures')).data[0];
+  const month = first.start_date.slice(0, 7);
+  const cal = await api('GET', `/api/packages/1/calendar?month=${month}`);
+  check('public package calendar', cal.status === 200 && cal.data.package_id === 1 && cal.data.month === month && cal.data.duration_days === 2, cal.body);
+  const day = cal.data.days.find((d) => d.date === first.start_date);
+  check('day has departure, seats and status', day && day.departure_id === first.id && day.seats_total === first.seats_total && day.seats_available === first.seats_available && ['AVAILABLE', 'LIMITED', 'SOLD_OUT'].includes(day.status), day);
+  check('end_date is the last trip day (2-day trip)', day.end_date === addDays(day.date, 1), day);
+  check('default month is accepted', (await api('GET', '/api/packages/1/calendar')).status === 200);
+  check('empty month has no days', (await api('GET', '/api/packages/1/calendar?month=1999-01')).data.days.length === 0);
+  for (const bad of ['2026-13', '2026-00', '26-05', 'abc', '2026-5']) {
+    check(`month ${bad} -> 400`, (await api('GET', `/api/packages/1/calendar?month=${bad}`)).status === 400);
+  }
+  check('bad package id -> 400', (await api('GET', '/api/packages/abc/calendar')).status === 400);
+  check('unknown package -> 404', (await api('GET', '/api/packages/99999999/calendar')).status === 404);
+
+  // A package with controlled departures: AVAILABLE -> LIMITED -> SOLD_OUT, plus a PAST one
+  const created = await api('POST', '/api/provider/packages', {
+    token: t.provider,
+    body: { title: `Calendar Test ${RUN}`, description: 'd', destination_id: 1, price: 40, duration_days: 3, image_url: '/assets/img/cities.jpg' },
+  });
+  const pid = created.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM bookings WHERE departure_id IN (SELECT id FROM package_departures WHERE package_id = ?)', [pid]);
+    await pool.execute('DELETE FROM package_departures WHERE package_id = ?', [pid]);
+    await pool.execute('DELETE FROM packages WHERE id = ?', [pid]);
+  });
+  check('PENDING package has no public calendar -> 404', (await api('GET', `/api/packages/${pid}/calendar`)).status === 404);
+  await api('PATCH', `/api/admin/packages/${pid}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+
+  const future = addDays(new Date().toISOString().slice(0, 10), 40);
+  const dep = await api('POST', '/api/provider/departures', { token: t.provider, body: { package_id: pid, start_date: future, seats_total: 8 } });
+  check('setup: provider adds a departure', dep.status < 300, dep.body);
+  const [pastRow] = await pool.execute("INSERT INTO package_departures (package_id, start_date, seats_total) VALUES (?, DATE_SUB(CURDATE(), INTERVAL 20 DAY), 5)", [pid]);
+  const futureMonth = future.slice(0, 7);
+  const statusOf = async () => (await api('GET', `/api/packages/${pid}/calendar?month=${futureMonth}`)).data.days.find((d) => d.date === future);
+  check('8 of 8 seats left -> AVAILABLE', (await statusOf()).status === 'AVAILABLE');
+  const depId = (await statusOf()).departure_id;
+  const book = async (guests) => {
+    const r = await api('POST', '/api/bookings', { token: t.customer, body: { departure_id: depId, num_guests: guests } });
+    if (r.status >= 300) throw new Error(JSON.stringify(r.body));
+    return r.data.id;
+  };
+  const b1 = await book(5);
+  const mid = await statusOf();
+  check('3 of 8 left -> still AVAILABLE, booked seats counted', mid.seats_available === 3 && mid.status === 'AVAILABLE', mid);
+  await book(1);
+  const limited = await statusOf();
+  check('2 of 8 left (25%) -> LIMITED', limited.seats_available === 2 && limited.status === 'LIMITED', limited);
+  await book(2);
+  const soldOut = await statusOf();
+  check('0 left -> SOLD_OUT', soldOut.seats_available === 0 && soldOut.status === 'SOLD_OUT', soldOut);
+  await api('POST', `/api/bookings/${b1}/cancel`, { token: t.customer });
+  check('cancelling frees seats again', (await statusOf()).seats_available === 5);
+
+  const pastDate = (await pool.query('SELECT DATE_FORMAT(start_date, "%Y-%m-%d") d FROM package_departures WHERE id = ?', [pastRow.insertId]))[0][0].d;
+  const pastCal = await api('GET', `/api/packages/${pid}/calendar?month=${pastDate.slice(0, 7)}`);
+  check('departure in the past -> PAST', pastCal.data.days.some((d) => d.date === pastDate && d.status === 'PAST'), pastCal.body);
+  check('3-day trip ends two days after it starts', (await statusOf()).end_date === addDays(future, 2));
+
+  // customer's own calendar
+  check('my calendar: no token -> 401', (await api('GET', '/api/bookings/calendar')).status === 401);
+  check('my calendar: provider -> 403', (await api('GET', '/api/bookings/calendar', { token: t.provider })).status === 403);
+  check('my calendar: admin -> 403', (await api('GET', '/api/bookings/calendar', { token: t.admin })).status === 403);
+  check('my calendar: bad month -> 400', (await api('GET', '/api/bookings/calendar?month=nope', { token: t.customer })).status === 400);
+  const mine = await api('GET', `/api/bookings/calendar?month=${futureMonth}`, { token: t.customer });
+  const ours = mine.data.bookings.filter((b) => b.package_id === pid);
+  check('my calendar lists my trips (incl. cancelled) with dates', mine.status === 200 && ours.length === 3 && ours.every((b) => b.date === future && b.end_date === addDays(future, 2) && b.package_title && b.destination_name) && ours.some((b) => b.status === 'CANCELLED'), mine.body);
+  check('my calendar: other months are empty of these trips', !(await api('GET', '/api/bookings/calendar?month=1999-01', { token: t.customer })).data.bookings.length);
+  const otherEmail = `cal.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Cal Tester', email: otherEmail, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const other = await login(otherEmail, 'Secret@123');
+  check("my calendar: other customers don't see my trips", (await api('GET', `/api/bookings/calendar?month=${futureMonth}`, { token: other })).data.bookings.length === 0);
+});
+
+section('Completed-trip sweep', async (t) => {
+  const { completePastBookings } = require('../backend/services/bookingService');
+  const [dep] = await pool.execute("INSERT INTO package_departures (package_id, start_date, seats_total) VALUES (1, DATE_SUB(CURDATE(), INTERVAL 30 DAY), 10)");
+  const [fut] = await pool.execute("INSERT INTO package_departures (package_id, start_date, seats_total) VALUES (2, DATE_ADD(CURDATE(), INTERVAL 200 DAY), 10)");
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM bookings WHERE departure_id IN (?, ?)', [dep.insertId, fut.insertId]);
+    await pool.execute('DELETE FROM package_departures WHERE id IN (?, ?)', [dep.insertId, fut.insertId]);
+  });
+  const mk = async (departureId, status) => (await pool.execute("INSERT INTO bookings (customer_id, departure_id, num_guests, total_price, status) VALUES (1, ?, 1, 10, ?)", [departureId, status]))[0].insertId;
+  const finished = await mk(dep.insertId, 'CONFIRMED');
+  const finishedPending = await mk(dep.insertId, 'PENDING');
+  const finishedCancelled = await mk(dep.insertId, 'CANCELLED');
+  const upcoming = await mk(fut.insertId, 'CONFIRMED');
+
+  const before = (await api('GET', '/api/admin/reports', { token: t.admin })).data.summary.completed_bookings;
+  const changed = await completePastBookings();
+  const statusOf = async (id) => (await pool.query('SELECT status FROM bookings WHERE id = ?', [id]))[0][0].status;
+  check('sweep reports at least the finished booking', changed >= 1, changed);
+  check('finished CONFIRMED trip -> COMPLETED', (await statusOf(finished)) === 'COMPLETED');
+  check('unpaid PENDING booking is left alone', (await statusOf(finishedPending)) === 'PENDING');
+  check('CANCELLED booking is left alone', (await statusOf(finishedCancelled)) === 'CANCELLED');
+  check('upcoming CONFIRMED trip is left alone', (await statusOf(upcoming)) === 'CONFIRMED');
+  check('running it again changes nothing', (await completePastBookings()) === 0);
+  const after = (await api('GET', '/api/admin/reports', { token: t.admin })).data.summary.completed_bookings;
+  check('admin report now counts it as completed', after - before === 1, { before, after });
+});
+
+// Registers a provider, optionally approves it, and registers cleanup. Returns { id, email, token }.
+async function makeProvider(t, { approve = true } = {}) {
+  const email = `prov.${RUN}.${Math.random().toString(36).slice(2, 6)}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Test Provider', email, password: 'Secret@123', role: 'PROVIDER' } });
+  if (reg.status !== 201) throw new Error(`Provider registration failed: ${JSON.stringify(reg.body)}`);
+  const id = reg.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM bookings WHERE departure_id IN (SELECT pd.id FROM package_departures pd JOIN packages p ON p.id = pd.package_id WHERE p.provider_id = ?)', [id]);
+    await pool.execute('DELETE FROM package_departures WHERE package_id IN (SELECT id FROM packages WHERE provider_id = ?)', [id]);
+    await pool.execute('DELETE FROM packages WHERE provider_id = ?', [id]);
+    await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+  });
+  if (approve) {
+    await api('PATCH', `/api/admin/providers/${id}/status`, { token: t.admin, body: { provider_status: 'APPROVED' } });
+  }
+  return { id, email, token: await login(email, 'Secret@123') };
+}
+
+section('Provider isolation and booking rules', async (t) => {
+  const p2 = await makeProvider(t, { approve: false });
+  check('new provider starts PENDING', (await api('GET', '/api/auth/me', { token: p2.token })).data.provider_status === 'PENDING');
+  check('pending provider can open the dashboard', (await api('GET', '/api/provider/dashboard', { token: p2.token })).status === 200);
+  for (const path of ['packages', 'departures', 'bookings', 'finance', 'reviews', 'reports']) {
+    check(`pending provider: GET /${path} -> 403`, (await api('GET', `/api/provider/${path}`, { token: p2.token })).status === 403);
+  }
+  await api('PATCH', `/api/admin/providers/${p2.id}/status`, { token: t.admin, body: { provider_status: 'APPROVED' } });
+  check('approval takes effect without a new login', (await api('GET', '/api/provider/packages', { token: p2.token })).status === 200);
+
+  // A booking on provider 1's package
+  const dep = (await api('GET', '/api/packages/1/departures')).data.at(-1);
+  const seatsBefore = (await api('GET', '/api/provider/departures', { token: t.provider })).data.find((d) => d.id === dep.id).booked_seats;
+  const booking = await makeBooking(t, { pay: true, guests: 2 });
+  const seatsAfter = (await api('GET', '/api/provider/departures', { token: t.provider })).data.find((d) => d.id === dep.id);
+  check('booked seats come from real bookings (+2)', seatsAfter.booked_seats === seatsBefore + 2 && seatsAfter.seats_available === seatsAfter.seats_total - seatsAfter.booked_seats, seatsAfter);
+
+  // Provider 2 sees nothing of provider 1
+  check("provider 2's package list excludes provider 1's", !(await api('GET', '/api/provider/packages', { token: p2.token })).data.some((p) => p.id === 1));
+  check("provider 2 cannot edit provider 1's package -> 404", (await api('PUT', '/api/provider/packages/1', { token: p2.token, body: { title: 'Hijacked', description: 'x', destination_id: 1, price: 1, duration_days: 1, image_url: '/x.jpg' } })).status === 404);
+  check("provider 2 cannot archive provider 1's package -> 404", (await api('DELETE', '/api/provider/packages/1', { token: p2.token })).status === 404);
+  check("provider 1's package is untouched", (await api('GET', '/api/packages/1')).data.title === 'Highland Trek Weekend');
+  check("provider 2's departure list excludes provider 1's", !(await api('GET', '/api/provider/departures', { token: p2.token })).data.some((d) => d.id === dep.id));
+  check("provider 2 cannot edit provider 1's departure -> 404", (await api('PUT', `/api/provider/departures/${dep.id}`, { token: p2.token, body: { start_date: dep.start_date, seats_total: 99 } })).status === 404);
+  check("provider 2 cannot delete provider 1's departure -> 404", (await api('DELETE', `/api/provider/departures/${dep.id}`, { token: p2.token })).status === 404);
+  check("provider 2 cannot add a departure to provider 1's package -> 404", (await api('POST', '/api/provider/departures', { token: p2.token, body: { package_id: 1, start_date: addDays(dep.start_date, 90), seats_total: 5 } })).status === 404);
+  check("provider 2's booking list excludes provider 1's", !(await api('GET', '/api/provider/bookings', { token: p2.token })).data.some((b) => b.id === booking.id));
+  check("provider 2 cannot read provider 1's booking -> 404", (await api('GET', `/api/provider/bookings/${booking.id}`, { token: p2.token })).status === 404);
+  check("provider 2 cannot confirm provider 1's booking -> 404", (await api('POST', `/api/provider/bookings/${booking.id}/confirm`, { token: p2.token })).status === 404);
+  const fin2 = (await api('GET', '/api/provider/finance', { token: p2.token })).data;
+  const rep2 = (await api('GET', '/api/provider/reports', { token: p2.token })).data;
+  const dash2 = (await api('GET', '/api/provider/dashboard', { token: p2.token })).data;
+  check("provider 2's finance and reports are empty", fin2.summary.paid_total === 0 && fin2.recent_payments.length === 0 && rep2.summary.total_bookings === 0 && rep2.packages.length === 0 && dash2.total_bookings === 0 && dash2.total_earnings === 0);
+  check("provider 2's reviews are empty", (await api('GET', '/api/provider/reviews', { token: p2.token })).data.reviews.length === 0);
+  check('provider 1 does see the booking', (await api('GET', '/api/provider/bookings', { token: t.provider })).data.some((b) => b.id === booking.id));
+  check('provider 1 finance includes the payment', (await api('GET', '/api/provider/finance', { token: t.provider })).data.recent_payments.some((x) => x.booking_id === booking.id));
+
+  // Departure rules
+  const low = await api('PUT', `/api/provider/departures/${dep.id}`, { token: t.provider, body: { start_date: dep.start_date, seats_total: seatsAfter.booked_seats - 1 } });
+  check('capacity below booked seats -> 400', low.status === 400 && /already booked/.test(low.error.message), low.body);
+  const del = await api('DELETE', `/api/provider/departures/${dep.id}`, { token: t.provider });
+  check('departure with booking history cannot be deleted -> 409', del.status === 409, del.body);
+  check('the departure is still there', (await api('GET', '/api/provider/departures', { token: t.provider })).data.some((d) => d.id === dep.id));
+  const dup = await api('POST', '/api/provider/departures', { token: t.provider, body: { package_id: 1, start_date: dep.start_date, seats_total: 5 } });
+  check('duplicate departure date -> 409', dup.status === 409, dup.body);
+  const own = await api('POST', '/api/provider/packages', { token: p2.token, body: { title: `P2 Package ${RUN}`, description: 'd', destination_id: 1, price: 20, duration_days: 1, image_url: '/assets/img/cities.jpg' } });
+  check('provider 2 can create its own package', own.status < 300 && own.data.status === 'PENDING');
+  const emptyDep = await api('POST', '/api/provider/departures', { token: p2.token, body: { package_id: own.data.id, start_date: addDays(new Date().toISOString().slice(0, 10), 50), seats_total: 4 } });
+  check('departures need an APPROVED package -> 404', emptyDep.status === 404);
+  await api('PATCH', `/api/admin/packages/${own.data.id}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+  const okDep = await api('POST', '/api/provider/departures', { token: p2.token, body: { package_id: own.data.id, start_date: addDays(new Date().toISOString().slice(0, 10), 50), seats_total: 4 } });
+  check('departure on an approved package works', okDep.status < 300, okDep.body);
+  check('empty departure can be deleted', (await api('DELETE', `/api/provider/departures/${okDep.data.id}`, { token: p2.token })).status < 300);
+
+  // Confirming bookings
+  const [pp] = await pool.execute("INSERT INTO bookings (customer_id, departure_id, num_guests, total_price, status) VALUES (1, ?, 1, 10, 'PENDING')", [dep.id]);
+  await pool.execute("INSERT INTO payments (booking_id, amount, method, status) VALUES (?, 10, 'CARD', 'PAID')", [pp.insertId]);
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM payments WHERE booking_id = ?', [pp.insertId]);
+    await pool.execute('DELETE FROM bookings WHERE id = ?', [pp.insertId]);
+  });
+  const confirm = await api('POST', `/api/provider/bookings/${pp.insertId}/confirm`, { token: t.provider });
+  check('confirm a PENDING booking that is PAID', confirm.status === 200 && confirm.data.status === 'CONFIRMED', confirm.body);
+  const again = await api('POST', `/api/provider/bookings/${pp.insertId}/confirm`, { token: t.provider });
+  check('confirming twice is harmless', again.status === 200 && again.data.alreadyConfirmed === true);
+  const unpaid = await makeBooking(t, { pay: false });
+  const refuse = await api('POST', `/api/provider/bookings/${unpaid.id}/confirm`, { token: t.provider });
+  check('cannot confirm an unpaid booking -> 400', refuse.status === 400, refuse.body);
+  const cancelled = await makeBooking(t, { pay: true });
+  await api('POST', `/api/bookings/${cancelled.id}/cancel`, { token: t.customer });
+  check('cannot confirm a cancelled booking -> 400', (await api('POST', `/api/provider/bookings/${cancelled.id}/confirm`, { token: t.provider })).status === 400);
+  check('confirm missing booking -> 404', (await api('POST', '/api/provider/bookings/99999999/confirm', { token: t.provider })).status === 404);
+  const statusFilter = await api('GET', '/api/provider/bookings?status=CANCELLED', { token: t.provider });
+  check('provider booking status filter', statusFilter.data.length >= 1 && statusFilter.data.every((b) => b.booking_status === 'CANCELLED'));
+
+  // 403 for other roles on provider-only data
+  for (const path of ['finance', 'reviews', 'reports', 'dashboard', 'bookings', 'departures', 'packages']) {
+    check(`customer/admin/super admin -> 403 on /api/provider/${path}`, (await Promise.all([t.customer, t.admin, t.superadmin].map((token) => api('GET', `/api/provider/${path}`, { token })))).every((r) => r.status === 403));
+  }
+});
+
+section('Reviews and ratings', async (t) => {
+  // A finished trip: departure 20 days ago on a 1-day package, booking CONFIRMED and paid
+  const [dep] = await pool.execute("INSERT INTO package_departures (package_id, start_date, seats_total) VALUES (4, DATE_SUB(CURDATE(), INTERVAL 20 DAY), 10)");
+  const ids = [];
+  const mk = async (status) => {
+    const [r] = await pool.execute('INSERT INTO bookings (customer_id, departure_id, num_guests, total_price, status) VALUES (1, ?, 1, 60, ?)', [dep.insertId, status]);
+    ids.push(r.insertId);
+    return r.insertId;
+  };
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM reviews WHERE booking_id IN (SELECT id FROM bookings WHERE departure_id = ?)', [dep.insertId]);
+    await pool.execute('DELETE FROM bookings WHERE departure_id = ?', [dep.insertId]);
+    await pool.execute('DELETE FROM package_departures WHERE id = ?', [dep.insertId]);
+  });
+  const finished = await mk('CONFIRMED');
+  const finished2 = await mk('COMPLETED');
+  const upcoming = await makeBooking(t, { pay: true });
+  const url = (id) => `/api/bookings/${id}/review`;
+
+  check('review before the trip ends -> 400', (await api('POST', url(upcoming.id), { token: t.customer, body: { rating: 5 } })).status === 400);
+  check('no token -> 401', (await api('POST', url(finished), { body: { rating: 5 } })).status === 401);
+  check('provider cannot review -> 403', (await api('POST', url(finished), { token: t.provider, body: { rating: 5 } })).status === 403);
+  for (const bad of [0, 6, 2.5, 'x', null]) {
+    check(`rating ${JSON.stringify(bad)} -> 400`, (await api('POST', url(finished), { token: t.customer, body: { rating: bad } })).status === 400);
+  }
+  check('review of a missing booking -> 404', (await api('POST', url(99999999), { token: t.customer, body: { rating: 5 } })).status === 404);
+
+  const other = `rev.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Other Customer', email: other, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const otherToken = await login(other, 'Secret@123');
+  check("cannot review someone else's booking -> 403", (await api('POST', url(finished), { token: otherToken, body: { rating: 5 } })).status === 403);
+
+  const before = (await api('GET', '/api/provider/reviews', { token: t.provider })).data;
+  const r1 = await api('POST', url(finished), { token: t.customer, body: { rating: 4, comment: 'Great trip' } });
+  check('review a finished trip', r1.status === 201, r1.body);
+  check('the booking is stored as COMPLETED', (await pool.query('SELECT status FROM bookings WHERE id = ?', [finished]))[0][0].status === 'COMPLETED');
+  check('second review of the same booking -> 409', (await api('POST', url(finished), { token: t.customer, body: { rating: 1 } })).status === 409);
+  const r2 = await api('POST', url(finished2), { token: t.customer, body: { rating: 2 } });
+  check('review a COMPLETED booking', r2.status === 201);
+
+  const after = (await api('GET', '/api/provider/reviews', { token: t.provider })).data;
+  const ratings = after.reviews.map((r) => r.rating);
+  const expected = Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10;
+  check('provider sees 2 more reviews', after.stats.review_count === before.stats.review_count + 2);
+  check('average rating matches the ratings', after.stats.average_rating === expected, { expected, got: after.stats.average_rating });
+  check('star counts add up', after.stats.one_star + after.stats.two_star + after.stats.three_star + after.stats.four_star + after.stats.five_star === after.stats.review_count);
+  check('review shows package, customer and comment', after.reviews.some((r) => r.comment === 'Great trip' && r.package_title === 'Island Snorkel Day' && r.customer_name === 'Demo Customer'));
+  const dash = (await api('GET', '/api/provider/dashboard', { token: t.provider })).data;
+  check('dashboard average and count agree', dash.average_rating === expected && dash.review_count === ratings.length);
+  const mine = (await api('GET', '/api/bookings/my', { token: t.customer })).data.find((b) => b.id === finished);
+  check('customer view shows the review and no more review button', mine.review_rating === 4 && !mine.review_eligible);
+});
+
+section('Admin edge cases', async (t) => {
+  // Delete guards
+  const cat = await api('DELETE', '/api/admin/categories/1', { token: t.admin });
+  check('category linked to packages cannot be deleted -> 409', cat.status === 409, cat.body);
+  check('...and it still exists', (await api('GET', '/api/admin/categories/1', { token: t.admin })).status === 200);
+  const dest = await api('DELETE', '/api/admin/destinations/1', { token: t.admin });
+  check('destination linked to packages cannot be deleted -> 409', dest.status === 409, dest.body);
+  check('...and it still exists', (await api('GET', '/api/admin/destinations/1', { token: t.admin })).status === 200);
+  const empty = await api('POST', '/api/admin/categories', { token: t.admin, body: { name: `Temp ${RUN}`, description: 'x' } });
+  check('unused category can be deleted', (await api('DELETE', `/api/admin/categories/${empty.data.id}`, { token: t.admin })).status === 200);
+  check('duplicate category name -> 409', (await api('POST', '/api/admin/categories', { token: t.admin, body: { name: 'Adventure', description: '' } })).status === 409);
+  check('duplicate destination name -> 409', (await api('POST', '/api/admin/destinations', { token: t.admin, body: { name: 'Mountains', description: 'd', image_url: '/x.jpg' } })).status === 409);
+
+  // Counts match reality
+  const packages = (await api('GET', '/api/admin/packages', { token: t.admin })).data;
+  for (const id of [1, 2, 3]) {
+    const d = (await api('GET', `/api/admin/destinations/${id}`, { token: t.admin })).data;
+    check(`destination ${d.name}: package_count matches packages`, d.package_count === packages.filter((p) => p.destination_id === id).length);
+  }
+  for (const id of [1, 2, 3, 4, 5]) {
+    const c = (await api('GET', `/api/admin/categories/${id}`, { token: t.admin })).data;
+    check(`category ${c.name}: package_count matches packages`, Number(c.package_count) === packages.filter((p) => p.category_id === id).length);
+  }
+
+  // Provider rejection and blocking
+  const p = await makeProvider(t, { approve: false });
+  const rejected = await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { provider_status: 'REJECTED' } });
+  check('reject a provider', rejected.status === 200 && rejected.data.provider_status === 'REJECTED', rejected.body);
+  check('REJECTED filter lists them', (await api('GET', '/api/admin/providers?status=REJECTED', { token: t.admin })).data.some((x) => x.id === p.id));
+  const blockedUse = await api('GET', '/api/provider/packages', { token: p.token });
+  check('rejected provider is locked out of provider tools -> 403', blockedUse.status === 403 && /REJECTED/.test(blockedUse.error.message), blockedUse.body);
+  await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { provider_status: 'APPROVED' } });
+  check('re-approving restores access', (await api('GET', '/api/provider/packages', { token: p.token })).status === 200);
+  await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { is_active: false } });
+  check('blocked provider cannot log in -> 403', (await api('POST', '/api/auth/login', { body: { email: p.email, password: 'Secret@123' } })).status === 403);
+  check('blocked provider token stops working -> 403', (await api('GET', '/api/provider/packages', { token: p.token })).status === 403);
+  check('BLOCKED filter lists them', (await api('GET', '/api/admin/providers?status=BLOCKED', { token: t.admin })).data.some((x) => x.id === p.id));
+  check('provider status needs exactly one field -> 400', (await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { provider_status: 'APPROVED', is_active: true } })).status === 400);
+  check('provider_status PENDING is not settable -> 400', (await api('PATCH', `/api/admin/providers/${p.id}/status`, { token: t.admin, body: { provider_status: 'PENDING' } })).status === 400);
+  check('customers cannot be changed via provider routes -> 404', (await api('PATCH', '/api/admin/providers/1/status', { token: t.admin, body: { is_active: false } })).status === 404);
+
+  // Customer blocking
+  const email = `blk.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Block Me', email, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const token = await login(email, 'Secret@123');
+  await api('PATCH', `/api/admin/customers/${reg.data.id}/status`, { token: t.admin, body: { is_active: false } });
+  check('blocked customer cannot log in -> 403', (await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } })).status === 403);
+  check('blocked customer token stops working -> 403', (await api('GET', '/api/bookings/my', { token })).status === 403);
+  check('BLOCKED filter lists them', (await api('GET', '/api/admin/customers?status=BLOCKED', { token: t.admin })).data.some((x) => x.id === reg.data.id));
+  await api('PATCH', `/api/admin/customers/${reg.data.id}/status`, { token: t.admin, body: { is_active: true } });
+  check('unblocking restores access', (await api('GET', '/api/bookings/my', { token })).status === 200);
+  check('customer status must be a boolean -> 400', (await api('PATCH', `/api/admin/customers/${reg.data.id}/status`, { token: t.admin, body: { is_active: 'no' } })).status === 400);
+  check('a provider id is not a customer -> 404', (await api('PATCH', '/api/admin/customers/2/status', { token: t.admin, body: { is_active: false } })).status === 404);
+
+  // Search edge cases
+  for (const q of ['%', '_', "'", '"; DROP TABLE users; --', 'a'.repeat(300), '%E0']) {
+    const results = await Promise.all(['customers', 'providers', 'destinations', 'categories', 'packages', 'bookings'].map((x) => api('GET', `/api/admin/${x}?search=${encodeURIComponent(q)}`, { token: t.admin })));
+    check(`search ${JSON.stringify(q.slice(0, 12))} never errors`, results.every((r) => r.status === 200), results.map((r) => r.status));
+  }
+  check('users table survived', (await api('GET', '/api/admin/customers', { token: t.admin })).data.length >= 1);
+  const found = await api('GET', '/api/admin/customers?search=Demo', { token: t.admin });
+  check('customer search by name', found.data.some((c) => c.email === 'customer@example.com'));
+  check('customer search by phone/email fragment', (await api('GET', '/api/admin/customers?search=customer@exam', { token: t.admin })).data.length >= 1);
+  check('no match -> empty list', (await api('GET', '/api/admin/customers?search=zzzzqqqq', { token: t.admin })).data.length === 0);
+  check('ACTIVE filter excludes blocked', (await api('GET', '/api/admin/customers?status=ACTIVE', { token: t.admin })).data.every((c) => c.is_active === 1));
+});
+
+section('Security and robustness', async (t) => {
+  // Login lockout after repeated failures (uses a throwaway account so demo logins are unaffected)
+  const email = `lock.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Lock Test', email, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const codes = [];
+  for (let i = 0; i < 5; i += 1) codes.push((await api('POST', '/api/auth/login', { body: { email, password: 'wrong-password' } })).status);
+  check('first 5 wrong passwords -> 401', codes.every((c) => c === 401), codes);
+  const locked = await api('POST', '/api/auth/login', { body: { email, password: 'wrong-password' } });
+  check('6th attempt is locked out -> 429', locked.status === 429, locked.body);
+  check('even the right password is refused while locked -> 429', (await api('POST', '/api/auth/login', { body: { email, password: 'Secret@123' } })).status === 429);
+  check('other accounts are not affected', (await api('POST', '/api/auth/login', { body: { email: 'customer@example.com', password: PASSWORD } })).status === 200);
+
+  // Static serving and URL handling
+  check('path traversal is blocked', [404, 400].includes((await fetch(`${BASE}/..%2f..%2fpackage.json`)).status));
+  check('path traversal (dotdot) is blocked', [404, 400].includes((await fetch(`${BASE}/../backend/server.js`)).status));
+  check('malformed URL escape -> 400, not 500', (await fetch(`${BASE}/%E0%A4%A`)).status === 400);
+  check('malformed escape in API path -> 400', (await api('GET', '/api/packages/1%')).status === 400);
+  check('unknown API route -> 404 JSON', (await api('GET', '/api/nope')).status === 404);
+  check('wrong method on a known path -> 404', (await api('DELETE', '/api/packages')).status === 404);
+  check('POST to a static path -> 405', (await api('POST', '/index.html')).status === 405);
+  const bad = await api('POST', '/api/auth/login', { raw: '{not json' });
+  check('malformed JSON body -> 400', bad.status === 400 && bad.error.message === 'Invalid JSON body', bad.body);
+  check('missing/invalid token -> 401', (await api('GET', '/api/auth/me', { token: 'abc.def' })).status === 401);
+  check('login never reveals whether the email exists', (await api('POST', '/api/auth/login', { body: { email: 'ghost@example.com', password: 'whatever1' } })).error.message === (await api('POST', '/api/auth/login', { body: { email: 'customer@example.com', password: 'wrong-pass' } })).error.message);
+  const reg2 = await api('POST', '/api/auth/register', { body: { full_name: 'Role Try', email: `role.${RUN}@example.com`, password: 'Secret@123', role: 'ADMIN' } });
+  check('cannot register as ADMIN -> 400', reg2.status === 400);
+  const noHash = JSON.stringify([(await api('GET', '/api/superadmin/admins', { token: t.superadmin })).body, (await api('GET', '/api/admin/customers', { token: t.admin })).body, (await api('GET', '/api/admin/providers', { token: t.admin })).body, (await api('GET', '/api/auth/me', { token: t.admin })).body]);
+  check('no response ever contains a password hash', !/password_hash|\$2[aby]\$/.test(noHash));
+
+  // Every route: bad ids and bodies must never produce a 500, for every role
+  const routes = Object.keys(require('../backend/routes'));
+  const roles = { none: undefined, customer: t.customer, provider: t.provider, admin: t.admin, superadmin: t.superadmin };
+  const bodies = [{ body: {} }, { raw: '{broken' }, { raw: '[]' }, { raw: '"text"' }, { raw: 'null' }];
+  const bad500 = [];
+  let calls = 0;
+  const before = (await api('GET', '/api/users/profile', { token: t.customer })).data;
+  for (const key of routes) {
+    const [method, template] = key.split(' ');
+    if (key === 'POST /api/auth/login') continue; // would trigger the login lockout
+    const idValues = template.includes(':') ? ['abc', '99999999'] : [null];
+    for (const idValue of idValues) {
+      const path = idValue === null ? template : template.replace(/:\w+/g, idValue);
+      for (const token of Object.values(roles)) {
+        for (const payload of (method === 'GET' ? [{}] : bodies)) {
+          const res = await api(method, path, { token, ...payload });
+          calls += 1;
+          const envelope = res.body && typeof res.body.success === 'boolean';
+          if (res.status >= 500 || !envelope) bad500.push(`${key} ${path} -> ${res.status}`);
+        }
+      }
+    }
+  }
+  check(`no 5xx or non-JSON answers in ${calls} hostile requests`, bad500.length === 0, [...new Set(bad500)].slice(0, 12));
+  const after = (await api('GET', '/api/users/profile', { token: t.customer })).data;
+  check('hostile requests changed no demo data', after.full_name === before.full_name && after.email === before.email);
+});
+
+// SECTIONS-END (new sections are added above this line)
+
+async function runCleanups() {
+  while (cleanups.length) {
+    const fn = cleanups.pop();
+    try { await fn(); } catch (err) { console.log(`  cleanup warning: ${err.message}`); }
+  }
+}
+
+async function main() {
+  const filter = process.argv[2];
+  const health = await fetch(`${BASE}/api/health`).catch(() => null);
+  if (!health || !health.ok) {
+    console.error(`Server not reachable at ${BASE}. Start it first (npm start).`);
+    process.exit(2);
+  }
+  const [[{ lastLogId }]] = await pool.query('SELECT COALESCE(MAX(id), 0) AS lastLogId FROM audit_logs');
+  const t = await tokens();
+  for (const { name, fn } of sections) {
+    if (filter && !name.toLowerCase().includes(filter.toLowerCase())) continue;
+    console.log(`\n${name}`);
+    try {
+      await fn(t);
+    } catch (err) {
+      failed += 1;
+      console.log(`  FAIL section crashed: ${err.stack || err.message}`);
+    }
+    await runCleanups(); // each section leaves the database as it found it
+  }
+  // Remove the audit entries this run created (test actions should not clutter the real log)
+  await pool.execute('DELETE FROM audit_logs WHERE id > ?', [lastLogId]);
+  console.log(`\n${passed} passed, ${failed} failed`);
+  await pool.end();
+  process.exit(failed ? 1 : 0);
+}
+
+main();

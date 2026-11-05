@@ -1,6 +1,8 @@
 const { ok, fail } = require('../utils/response');
 const { parseJsonBody } = require('../utils/body');
 const { registerUser, loginUser } = require('../services/authService');
+const { getUserPermissions } = require('../services/permissionService');
+const { isLocked, recordFailure, clearFailures } = require('../utils/rateLimit');
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isText = (value) => typeof value === 'string';
@@ -30,10 +32,23 @@ async function login(req, res) {
   if (!email || !isText(body.password) || !body.password) {
     return fail(res, 400, 'Email and password are required');
   }
-  ok(res, await loginUser(email, body.password));
+  const key = `${req.socket.remoteAddress}|${email}`;
+  if (isLocked(key)) return fail(res, 429, 'Too many failed login attempts. Please try again in a few minutes.');
+  try {
+    const result = await loginUser(email, body.password);
+    clearFailures(key);
+    ok(res, result);
+  } catch (err) {
+    if (err.status === 401) recordFailure(key);
+    throw err;
+  }
 }
 
+// For ADMIN and SUPER_ADMIN the response also lists the effective permissions so the UI can hide pages.
 async function getMe(req, res) {
+  if (req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN') {
+    return ok(res, { ...req.user, permissions: await getUserPermissions(req.user) });
+  }
   ok(res, req.user);
 }
 

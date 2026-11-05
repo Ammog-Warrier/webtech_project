@@ -88,3 +88,73 @@ INSERT INTO package_departures (package_id, start_date, seats_total)
 SELECT p.id, DATE_ADD(CURDATE(), INTERVAL o.days DAY), p.max_group_size
 FROM packages p JOIN (SELECT 30 days UNION ALL SELECT 60) o
 WHERE NOT EXISTS (SELECT 1 FROM package_departures d WHERE d.package_id = p.id);
+
+-- Demo admin gets every permission (development only). Safe to re-run.
+INSERT IGNORE INTO admin_permissions (admin_id, permission)
+SELECT u.id, p.permission
+FROM users u
+JOIN (
+  SELECT 'MANAGE_CUSTOMERS' permission
+  UNION ALL SELECT 'MANAGE_PROVIDERS'
+  UNION ALL SELECT 'MODERATE_PACKAGES'
+  UNION ALL SELECT 'MANAGE_CATALOGUE'
+  UNION ALL SELECT 'VIEW_BOOKINGS'
+  UNION ALL SELECT 'VIEW_REPORTS'
+) p
+WHERE u.email = 'admin@example.com';
+
+-- Sample activity so the admin, provider and report screens have something to show (development only).
+-- Safe to re-run: every row is created only when it does not exist yet.
+INSERT IGNORE INTO package_departures (package_id, start_date, seats_total)
+SELECT p.id, '2026-09-15', 8 FROM packages p WHERE p.title = 'Old Town Food Walk';
+
+-- 1. A finished, paid and reviewed trip
+INSERT INTO bookings (customer_id, departure_id, num_guests, total_price, status, created_at)
+SELECT u.id, pd.id, 2, 70.00, 'COMPLETED', '2026-09-01 10:00:00'
+FROM users u
+JOIN package_departures pd ON pd.start_date = '2026-09-15'
+JOIN packages p ON p.id = pd.package_id AND p.title = 'Old Town Food Walk'
+WHERE u.email = 'customer@example.com'
+  AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.customer_id = u.id AND b.departure_id = pd.id);
+
+INSERT IGNORE INTO payments (booking_id, amount, method, status, paid_at)
+SELECT b.id, b.total_price, 'UPI', 'PAID', '2026-09-01 10:05:00'
+FROM bookings b
+JOIN users u ON u.id = b.customer_id AND u.email = 'customer@example.com'
+JOIN package_departures pd ON pd.id = b.departure_id AND pd.start_date = '2026-09-15'
+JOIN packages p ON p.id = pd.package_id AND p.title = 'Old Town Food Walk';
+
+INSERT IGNORE INTO reviews (booking_id, rating, comment, created_at)
+SELECT b.id, 5, 'Fantastic food and a very friendly guide.', '2026-09-16 09:00:00'
+FROM bookings b
+JOIN users u ON u.id = b.customer_id AND u.email = 'customer@example.com'
+JOIN package_departures pd ON pd.id = b.departure_id AND pd.start_date = '2026-09-15'
+JOIN packages p ON p.id = pd.package_id AND p.title = 'Old Town Food Walk';
+
+-- 2. An upcoming, paid and confirmed booking
+INSERT INTO bookings (customer_id, departure_id, num_guests, total_price, status)
+SELECT u.id, pd.id, 2, 90.00, 'CONFIRMED'
+FROM users u
+JOIN packages p ON p.title = 'Sunrise Peak Hike'
+JOIN package_departures pd ON pd.package_id = p.id
+  AND pd.start_date = (SELECT MIN(x.start_date) FROM package_departures x WHERE x.package_id = p.id)
+WHERE u.email = 'customer@example.com'
+  AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.customer_id = u.id AND b.departure_id = pd.id);
+
+INSERT IGNORE INTO payments (booking_id, amount, method, status)
+SELECT b.id, b.total_price, 'CARD', 'PAID'
+FROM bookings b
+JOIN users u ON u.id = b.customer_id AND u.email = 'customer@example.com'
+JOIN package_departures pd ON pd.id = b.departure_id
+JOIN packages p ON p.id = pd.package_id AND p.title = 'Sunrise Peak Hike'
+WHERE b.status = 'CONFIRMED';
+
+-- 3. An upcoming booking that has not been paid yet
+INSERT INTO bookings (customer_id, departure_id, num_guests, total_price, status)
+SELECT u.id, pd.id, 1, 60.00, 'PENDING'
+FROM users u
+JOIN packages p ON p.title = 'Island Snorkel Day'
+JOIN package_departures pd ON pd.package_id = p.id
+  AND pd.start_date = (SELECT MIN(x.start_date) FROM package_departures x WHERE x.package_id = p.id)
+WHERE u.email = 'customer@example.com'
+  AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.customer_id = u.id AND b.departure_id = pd.id);

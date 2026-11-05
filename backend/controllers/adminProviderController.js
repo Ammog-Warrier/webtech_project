@@ -1,5 +1,7 @@
+const { logAction } = require('../services/auditService');
 const { ok, fail } = require('../utils/response');
 const { parseJsonBody } = require('../utils/body');
+const { parsePaging, applyPaging } = require('../utils/pagination');
 const {
   listProviders,
   getProvider,
@@ -13,13 +15,14 @@ function validId(value) {
 async function getProviders(req, res) {
   try {
     const url = new URL(req.url, 'http://localhost');
+    const paging = parsePaging(url.searchParams);
     const providers = await listProviders({
       search: url.searchParams.get('search') || '',
       status: url.searchParams.get('status') || '',
     });
-    return ok(res, providers);
+    return ok(res, applyPaging(providers, paging));
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to load providers');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to load providers');
   }
 }
 
@@ -30,7 +33,7 @@ async function getProviderDetails(req, res) {
     if (!provider) return fail(res, 404, 'Provider not found');
     return ok(res, provider);
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to load provider');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to load provider');
   }
 }
 
@@ -51,9 +54,13 @@ async function updateProviderStatus(req, res) {
   }
   try {
     const provider = await updateProvider(Number(req.params.id), body);
+    const action = body.provider_status
+      ? `PROVIDER_${body.provider_status}`
+      : (body.is_active ? 'PROVIDER_UNBLOCKED' : 'PROVIDER_BLOCKED');
+    await logAction(req.user.id, action, 'users', provider.id, provider.email);
     return ok(res, provider);
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to update provider');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to update provider');
   }
 }
 

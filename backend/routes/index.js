@@ -53,10 +53,61 @@ const {
   deleteAdminCategory,
 } = require('../controllers/adminCategoryController');
 
+// Admin package moderation
+const {
+  getPackages: getAdminPackages,
+  getPackageDetails: getAdminPackageDetails,
+  updatePackageStatus: updateAdminPackageStatus,
+} = require('../controllers/adminPackageController');
+
+// Admin booking monitoring (read only)
+const {
+  getBookings: getAdminBookings,
+  getBookingDetails: getAdminBookingDetails,
+} = require('../controllers/adminBookingController');
+
+// Admin reports
+const { getReport: getAdminReport } = require('../controllers/adminReportController');
+
+// Super admin: admin account management
+const {
+  getAdmins: getSuperAdminAdmins,
+  getAdminDetails: getSuperAdminAdminDetails,
+  createAdminAccount,
+  updateAdminAccount,
+  updateAdminStatus: updateSuperAdminAdminStatus,
+  deleteAdminAccount,
+} = require('../controllers/superAdminAdminController');
+
+// Super admin: admin permissions
+const {
+  listPermissions,
+  getPermissions: getAdminPermissionList,
+  updatePermissions: updateAdminPermissionList,
+} = require('../controllers/superAdminPermissionController');
+
+// Super admin: logs and settings
+const {
+  getLogs: getSuperAdminLogs,
+  getSettings: getSuperAdminSettings,
+  putSetting: putSuperAdminSetting,
+} = require('../controllers/superAdminSystemController');
+
+// Customer wishlist
+const {
+  getWishlist,
+  addWishlistItem,
+  removeWishlistItem,
+} = require('../controllers/wishlistController');
+
+// Booking calendar
+const { packageCalendar, myCalendar } = require('../controllers/calendarController');
+
 const {
   requireAuth,
   requireRole,
   requireApprovedProvider,
+  requirePermission,
 } = require('../middleware/auth');
 
 const {
@@ -98,6 +149,7 @@ const routes = {
   'GET /api/packages': getPackages,
   'GET /api/packages/:id': getPackage,
   'GET /api/packages/:id/departures': getPackageDepartures,
+  'GET /api/packages/:id/calendar': packageCalendar,
 
   'POST /api/auth/register': register,
   'POST /api/auth/login': login,
@@ -114,88 +166,139 @@ const routes = {
   ),
 
   // Admin customer management
-  'GET /api/admin/customers': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'GET /api/admin/customers': requirePermission(
+    'MANAGE_CUSTOMERS',
     getAdminCustomers
   ),
 
-  'GET /api/admin/customers/:id': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'GET /api/admin/customers/:id': requirePermission(
+    'MANAGE_CUSTOMERS',
     getAdminCustomerDetails
   ),
 
-  'PATCH /api/admin/customers/:id/status': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'PATCH /api/admin/customers/:id/status': requirePermission(
+    'MANAGE_CUSTOMERS',
     updateAdminCustomerStatus
   ),
 
   // Admin provider management
-  'GET /api/admin/providers': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'GET /api/admin/providers': requirePermission(
+    'MANAGE_PROVIDERS',
     getAdminProviders
   ),
 
-  'GET /api/admin/providers/:id': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'GET /api/admin/providers/:id': requirePermission(
+    'MANAGE_PROVIDERS',
     getAdminProviderDetails
   ),
 
-  'PATCH /api/admin/providers/:id/status': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'PATCH /api/admin/providers/:id/status': requirePermission(
+    'MANAGE_PROVIDERS',
     updateAdminProviderStatus
   ),
 
   // Admin destination management
-  'GET /api/admin/destinations': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'GET /api/admin/destinations': requirePermission(
+    'MANAGE_CATALOGUE',
     getAdminDestinations
   ),
 
-  'GET /api/admin/destinations/:id': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'GET /api/admin/destinations/:id': requirePermission(
+    'MANAGE_CATALOGUE',
     getAdminDestinationDetails
   ),
 
-  'POST /api/admin/destinations': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'POST /api/admin/destinations': requirePermission(
+    'MANAGE_CATALOGUE',
     createAdminDestination
   ),
 
-  'PUT /api/admin/destinations/:id': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'PUT /api/admin/destinations/:id': requirePermission(
+    'MANAGE_CATALOGUE',
     updateAdminDestination
   ),
 
-  'DELETE /api/admin/destinations/:id': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'DELETE /api/admin/destinations/:id': requirePermission(
+    'MANAGE_CATALOGUE',
     deleteAdminDestination
   ),
 
   // Admin category management
-  'GET /api/admin/categories': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'GET /api/admin/categories': requirePermission(
+    'MANAGE_CATALOGUE',
     getAdminCategories
   ),
 
-  'GET /api/admin/categories/:id': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'GET /api/admin/categories/:id': requirePermission(
+    'MANAGE_CATALOGUE',
     getAdminCategoryDetails
   ),
 
-  'POST /api/admin/categories': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'POST /api/admin/categories': requirePermission(
+    'MANAGE_CATALOGUE',
     createAdminCategory
   ),
 
-  'PUT /api/admin/categories/:id': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'PUT /api/admin/categories/:id': requirePermission(
+    'MANAGE_CATALOGUE',
     updateAdminCategory
   ),
 
-  'DELETE /api/admin/categories/:id': requireRole(
-    ['ADMIN', 'SUPER_ADMIN'],
+  'DELETE /api/admin/categories/:id': requirePermission(
+    'MANAGE_CATALOGUE',
     deleteAdminCategory
   ),
+
+  // Admin package moderation
+  'GET /api/admin/packages': requirePermission(
+    'MODERATE_PACKAGES',
+    getAdminPackages
+  ),
+
+  'GET /api/admin/packages/:id': requirePermission(
+    'MODERATE_PACKAGES',
+    getAdminPackageDetails
+  ),
+
+  'PATCH /api/admin/packages/:id/status': requirePermission(
+    'MODERATE_PACKAGES',
+    updateAdminPackageStatus
+  ),
+
+  // Admin booking monitoring
+  'GET /api/admin/bookings': requirePermission(
+    'VIEW_BOOKINGS',
+    getAdminBookings
+  ),
+
+  'GET /api/admin/bookings/:id': requirePermission(
+    'VIEW_BOOKINGS',
+    getAdminBookingDetails
+  ),
+
+  // Admin reports
+  'GET /api/admin/reports': requirePermission(
+    'VIEW_REPORTS',
+    getAdminReport
+  ),
+
+  // Super admin: admin account management
+  'GET /api/superadmin/admins': requireRole('SUPER_ADMIN', getSuperAdminAdmins),
+  'POST /api/superadmin/admins': requireRole('SUPER_ADMIN', createAdminAccount),
+  'GET /api/superadmin/admins/:id': requireRole('SUPER_ADMIN', getSuperAdminAdminDetails),
+  'PUT /api/superadmin/admins/:id': requireRole('SUPER_ADMIN', updateAdminAccount),
+  'PATCH /api/superadmin/admins/:id/status': requireRole('SUPER_ADMIN', updateSuperAdminAdminStatus),
+  'DELETE /api/superadmin/admins/:id': requireRole('SUPER_ADMIN', deleteAdminAccount),
+
+  // Super admin: admin permissions
+  'GET /api/superadmin/permissions': requireRole('SUPER_ADMIN', listPermissions),
+  'GET /api/superadmin/admins/:id/permissions': requireRole('SUPER_ADMIN', getAdminPermissionList),
+  'PUT /api/superadmin/admins/:id/permissions': requireRole('SUPER_ADMIN', updateAdminPermissionList),
+
+  // Super admin: system logs and settings
+  'GET /api/superadmin/logs': requireRole('SUPER_ADMIN', getSuperAdminLogs),
+  'GET /api/superadmin/settings': requireRole('SUPER_ADMIN', getSuperAdminSettings),
+  'PUT /api/superadmin/settings/:key': requireRole('SUPER_ADMIN', putSuperAdminSetting),
 
   // Provider dashboard
   'GET /api/provider/dashboard': requireRole(
@@ -255,9 +358,15 @@ const routes = {
   // Provider business reports
   'GET /api/provider/reports': requireApprovedProvider(getMyReports),
 
+  // Customer wishlist
+  'GET /api/wishlist': requireRole('CUSTOMER', getWishlist),
+  'POST /api/wishlist': requireRole('CUSTOMER', addWishlistItem),
+  'DELETE /api/wishlist/:packageId': requireRole('CUSTOMER', removeWishlistItem),
+
   // Customer booking management
   'POST /api/bookings': requireRole('CUSTOMER', createNewBooking),
   'GET /api/bookings/my': requireRole('CUSTOMER', getMyBookings),
+  'GET /api/bookings/calendar': requireRole('CUSTOMER', myCalendar),
 
   'POST /api/bookings/:id/cancel': requireRole(
     'CUSTOMER',

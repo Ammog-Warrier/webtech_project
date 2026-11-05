@@ -11,7 +11,7 @@ async function getPackageDepartures(req, res) {
     const departures = await listPackageDepartures(packageId);
     ok(res, departures);
   } catch (err) {
-    fail(res, err.status || 500, err.message);
+    fail(res, err.status || 500, err.status ? err.message : 'Something went wrong. Please try again.');
   }
 }
 

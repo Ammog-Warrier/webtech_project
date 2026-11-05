@@ -35,7 +35,7 @@ async function listProviderPackages(providerId) {
   const [rows] = await pool.execute(
     `SELECT p.id, p.title, p.description, p.price, p.duration_days, p.max_group_size,
             p.image_url, p.destination_id, d.name AS destination_name,
-            p.category_id, c.name AS category_name, p.status, p.created_at
+            p.category_id, c.name AS category_name, p.status, p.rejection_reason, p.created_at
        FROM packages p
        JOIN destinations d ON d.id = p.destination_id
        LEFT JOIN categories c ON c.id = p.category_id
@@ -72,7 +72,7 @@ async function findOwnedPackage(providerId, packageId) {
   const [rows] = await pool.execute(
     `SELECT p.id, p.title, p.description, p.itinerary, p.inclusions, p.price,
             p.duration_days, p.max_group_size, p.image_url, p.destination_id,
-            p.category_id, p.status
+            p.category_id, p.status, p.rejection_reason
        FROM packages p WHERE p.id = ? AND p.provider_id = ?`,
     [packageId, providerId]
   );
@@ -90,7 +90,7 @@ async function updateProviderPackage(providerId, packageId, body) {
     `UPDATE packages
         SET destination_id = ?, category_id = ?, title = ?, description = ?,
             itinerary = ?, inclusions = ?, price = ?, duration_days = ?,
-            max_group_size = ?, image_url = ?, status = 'PENDING'
+            max_group_size = ?, image_url = ?, status = 'PENDING', rejection_reason = NULL
       WHERE id = ? AND provider_id = ?`,
     [input.destinationId, input.categoryId, input.title, input.description,
       input.itinerary, input.inclusions, input.price, input.durationDays,
