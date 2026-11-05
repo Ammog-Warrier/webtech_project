@@ -38,6 +38,7 @@ Rule: every schema change = a new numbered migration **and** the same change in 
 |---|---|
 | `npm start` | Run the server |
 | `npm run dev` | Run with nodemon (auto-reload) |
+| `npm run test:api` | End-to-end API checks in `tests/api.test.js` (plain Node). Start the server first; set `TEST_BASE_URL` if it is not on port 3000. Optional argument filters sections, e.g. `node tests/api.test.js moderation`. Cleans up the data it creates |
 
 ## API endpoints
 Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": { "message": "..." } }`.
@@ -50,6 +51,9 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET/POST/PUT/DELETE | /api/admin/destinations[/:id] | ADMIN, SUPER_ADMIN | Destination management (see section below) |
 | GET/POST/PUT/DELETE | /api/admin/categories[/:id] | ADMIN, SUPER_ADMIN | Category management (see section below) |
 | GET | /api/provider/* | PROVIDER | Provider portal endpoints (see "Provider portal endpoints") |
+| GET | /api/admin/packages?status=&search= | ADMIN, SUPER_ADMIN | Packages of all providers with provider, destination and category (PENDING first). `status` is `PENDING`, `APPROVED`, `REJECTED` or `ARCHIVED` (400 otherwise). Supports pagination |
+| GET | /api/admin/packages/:id | ADMIN, SUPER_ADMIN | One package with itinerary, inclusions and `rejection_reason`; 400 bad id, 404 missing |
+| PATCH | /api/admin/packages/:id/status | ADMIN, SUPER_ADMIN | Body: `status` (`APPROVED` or `REJECTED`), optional `rejection_reason` (max 255, only stored when rejecting). Approving clears the reason. 409 for ARCHIVED packages. Logged as `PACKAGE_APPROVED/REJECTED` |
 | GET | /api/admin/dashboard | ADMIN, SUPER_ADMIN | Platform-wide customer, provider, package, destination, category, booking and payment summary; includes today's registrations and bookings |
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
 | GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
@@ -73,7 +77,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | users | `role_id` FK to roles; `password_hash` (bcryptjs); `phone` (optional); `is_active` (0 = account disabled); `provider_status` NOT_APPLICABLE / PENDING / APPROVED / REJECTED (only used for PROVIDER accounts; a provider must be APPROVED before publishing packages) |
 | categories | `name` unique, `description` (seeded: Adventure, Cultural, Beach & Island, Food & Culinary, Nature & Wildlife) |
 | destinations | `name` unique, `description`, `image_url` (seeded: Mountains, Beaches, Cities) |
-| packages | `destination_id` FK, `category_id` FK to categories (optional), `title` unique, `price`, `duration_days`, `image_url`, `itinerary` and `inclusions` (text, one item per line), `max_group_size` (6 seeded), `provider_id` FK to users (owner), `status` PENDING / APPROVED / REJECTED / ARCHIVED (only APPROVED packages are public) |
+| packages | `destination_id` FK, `category_id` FK to categories (optional), `title` unique, `price`, `duration_days`, `image_url`, `itinerary` and `inclusions` (text, one item per line), `max_group_size` (6 seeded), `rejection_reason` (optional, set by an admin when rejecting; cleared on approval or when the provider edits and resubmits), `provider_id` FK to users (owner), `status` PENDING / APPROVED / REJECTED / ARCHIVED (only APPROVED packages are public) |
 | package_departures | Bookable dates: `package_id` FK, `start_date`, `seats_total`; unique per (package, date). Seeded: two per package (30 and 60 days after seeding) |
 | bookings | `customer_id` FK to users, `departure_id` FK, `num_guests`, `total_price` (snapshot of price x guests), `status` PENDING / CONFIRMED / CANCELLED / COMPLETED |
 | payments | **Simulated** (no real gateway): `booking_id` FK (unique, one per booking), `amount`, `method` CARD / UPI / NET_BANKING, `status` PAID / REFUNDED, `paid_at` |
@@ -95,7 +99,7 @@ Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`
 - **Reviews:** only for the customer's own COMPLETED booking (or confirmed where trip end date has passed), once per booking. Verified independently inside `createReview()`.
 - **Address management:** each user has one address in `addresses` with a UNIQUE constraint on `user_id`, upserted via `INSERT ... ON DUPLICATE KEY UPDATE`.
 - **Provider approval:** new providers start PENDING; an admin approves/rejects. New packages start PENDING; an admin approves/rejects them.
-- **Audit logging:** admin and super admin actions write a row to `audit_logs` through `logAction(userId, action, entity, entityId, details)` in `backend/services/auditService.js`. Logging is best effort (a failure is printed to the server console and never breaks the action). Actions logged so far: `CUSTOMER_BLOCKED/UNBLOCKED`, `PROVIDER_APPROVED/REJECTED/BLOCKED/UNBLOCKED`, `DESTINATION_CREATED/UPDATED/DELETED`, `CATEGORY_CREATED/UPDATED/DELETED`. New admin features must log their changes the same way.
+- **Audit logging:** admin and super admin actions write a row to `audit_logs` through `logAction(userId, action, entity, entityId, details)` in `backend/services/auditService.js`. Logging is best effort (a failure is printed to the server console and never breaks the action). Actions logged so far: `CUSTOMER_BLOCKED/UNBLOCKED`, `PROVIDER_APPROVED/REJECTED/BLOCKED/UNBLOCKED`, `DESTINATION_CREATED/UPDATED/DELETED`, `CATEGORY_CREATED/UPDATED/DELETED`, `PACKAGE_APPROVED/REJECTED`. New admin features must log their changes the same way.
 
 ### Roles and permissions (enforced by backend middleware)
 | Action | Customer | Provider | Admin | Super Admin |
@@ -148,12 +152,15 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 **API:** use `ok()` / `fail()` from `backend/utils/response.js`. Status codes: 200/201 success, 400 validation, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict, 500 server error. Routes under `/api`, plural nouns.
 
+**Pagination:** list endpoints that support it return a plain array by default. Add `?page=<n>&limit=<n>` (limit max 100, default 10) to get `{ "items": [...], "page", "limit", "total", "total_pages" }` instead; invalid values return 400. Helper: `backend/utils/pagination.js`.
+
 **Security:** no credentials in code, `.env` stays untracked, hash passwords with bcryptjs and never return hashes, validate input server-side, enforce roles in the backend, use `textContent` (not `innerHTML`) for user content, app connects with the limited DB user (never root).
 
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
 
+- 2026-11-06: Admin package moderation: `GET /api/admin/packages`, `GET /api/admin/packages/:id`, `PATCH /api/admin/packages/:id/status`; migration 011 adds `packages.rejection_reason` (shown to the provider); optional pagination helper; `tests/api.test.js` and `npm run test:api`.
 - 2026-11-06: Step 6 audit logging: new `auditService.logAction()`; customer, provider, destination and category admin actions now write to `audit_logs`.
 - 2026-11-06: Documentation sync: documented provider portal endpoints, admin management endpoints and pages, rewrote the Step 4.5 category section, and recorded migration 010 (unique `addresses.user_id`).
 

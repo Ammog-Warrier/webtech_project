@@ -1,7 +1,7 @@
 CREATE DATABASE IF NOT EXISTS local_tourism CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE local_tourism;
 
--- Full schema (migrations 001-010 applied). Extend via database/migrations/ as features are built.
+-- Full schema (migrations 001-011 applied). Extend via database/migrations/ as features are built.
 CREATE TABLE IF NOT EXISTS roles (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(30) NOT NULL UNIQUE
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS categories (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- 001_destinations_packages (packages also includes 002_package_details, 004_package_ownership, 009 categories)
+-- 001_destinations_packages (packages also includes 002_package_details, 004_package_ownership, 009 categories, 011 rejection_reason)
 CREATE TABLE IF NOT EXISTS destinations (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL UNIQUE,
@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS packages (
   max_group_size SMALLINT UNSIGNED NOT NULL DEFAULT 12,
   image_url VARCHAR(255) NOT NULL,
   status ENUM('PENDING','APPROVED','REJECTED','ARCHIVED') NOT NULL DEFAULT 'PENDING',
+  rejection_reason VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_packages_provider_status (provider_id, status),
   INDEX idx_packages_category (category_id),
