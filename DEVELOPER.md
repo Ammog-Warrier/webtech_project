@@ -95,7 +95,7 @@ Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`
 - **Reviews:** only for the customer's own COMPLETED booking (or confirmed where trip end date has passed), once per booking. Verified independently inside `createReview()`.
 - **Address management:** each user has one address in `addresses` with a UNIQUE constraint on `user_id`, upserted via `INSERT ... ON DUPLICATE KEY UPDATE`.
 - **Provider approval:** new providers start PENDING; an admin approves/rejects. New packages start PENDING; an admin approves/rejects them.
-- **Audit logging:** admin and super admin actions (approvals, user changes) write a row to `audit_logs`.
+- **Audit logging:** admin and super admin actions write a row to `audit_logs` through `logAction(userId, action, entity, entityId, details)` in `backend/services/auditService.js`. Logging is best effort (a failure is printed to the server console and never breaks the action). Actions logged so far: `CUSTOMER_BLOCKED/UNBLOCKED`, `PROVIDER_APPROVED/REJECTED/BLOCKED/UNBLOCKED`, `DESTINATION_CREATED/UPDATED/DELETED`, `CATEGORY_CREATED/UPDATED/DELETED`. New admin features must log their changes the same way.
 
 ### Roles and permissions (enforced by backend middleware)
 | Action | Customer | Provider | Admin | Super Admin |
@@ -154,6 +154,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Step 6 audit logging: new `auditService.logAction()`; customer, provider, destination and category admin actions now write to `audit_logs`.
 - 2026-11-06: Documentation sync: documented provider portal endpoints, admin management endpoints and pages, rewrote the Step 4.5 category section, and recorded migration 010 (unique `addresses.user_id`).
 
 - 2026-11-05: Step 4.1 Admin Dashboard: added an admin-only platform summary API and dashboard page for account, catalogue, booking and payment metrics; ADMIN and SUPER_ADMIN login redirects now lead to the admin dashboard.

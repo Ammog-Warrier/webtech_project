@@ -1,3 +1,4 @@
+const { logAction } = require('../services/auditService');
 const { ok, fail } = require('../utils/response');
 const { parseJsonBody } = require('../utils/body');
 const {
@@ -42,6 +43,7 @@ async function updateCustomerStatus(req, res) {
   }
   try {
     const customer = await setCustomerActiveStatus(Number(req.params.id), body.is_active);
+    await logAction(req.user.id, body.is_active ? 'CUSTOMER_UNBLOCKED' : 'CUSTOMER_BLOCKED', 'users', customer.id, customer.email);
     ok(res, customer);
   } catch (err) {
     fail(res, err.status || 500, err.message || 'Unable to update customer status');

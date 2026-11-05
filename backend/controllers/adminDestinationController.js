@@ -1,3 +1,4 @@
+const { logAction } = require('../services/auditService');
 const { ok, fail } = require('../utils/response');
 const { parseJsonBody } = require('../utils/body');
 const {
@@ -65,6 +66,7 @@ async function createDestination(req, res) {
     const validationError = validateDestination(body);
     if (validationError) return fail(res, 400, validationError);
     const destination = await createAdminDestinationRecord(cleanDestination(body));
+    await logAction(req.user.id, 'DESTINATION_CREATED', 'destinations', destination.id, destination.name);
     return ok(res, destination, 201);
   } catch (err) {
     return fail(res, err.status || 500, err.message || 'Unable to create destination');
@@ -83,6 +85,7 @@ async function updateDestination(req, res) {
       Number(req.params.id),
       cleanDestination(body)
     );
+    await logAction(req.user.id, 'DESTINATION_UPDATED', 'destinations', destination.id, destination.name);
     return ok(res, destination);
   } catch (err) {
     return fail(res, err.status || 500, err.message || 'Unable to update destination');
@@ -95,6 +98,7 @@ async function deleteDestination(req, res) {
   }
   try {
     await deleteAdminDestinationRecord(Number(req.params.id));
+    await logAction(req.user.id, 'DESTINATION_DELETED', 'destinations', Number(req.params.id), null);
     return ok(res, { message: 'Destination deleted successfully' });
   } catch (err) {
     return fail(res, err.status || 500, err.message || 'Unable to delete destination');

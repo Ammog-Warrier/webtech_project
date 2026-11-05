@@ -1,3 +1,4 @@
+const { logAction } = require('../services/auditService');
 const { ok, fail } = require('../utils/response');
 const { parseJsonBody } = require('../utils/body');
 const {
@@ -51,6 +52,10 @@ async function updateProviderStatus(req, res) {
   }
   try {
     const provider = await updateProvider(Number(req.params.id), body);
+    const action = body.provider_status
+      ? `PROVIDER_${body.provider_status}`
+      : (body.is_active ? 'PROVIDER_UNBLOCKED' : 'PROVIDER_BLOCKED');
+    await logAction(req.user.id, action, 'users', provider.id, provider.email);
     return ok(res, provider);
   } catch (err) {
     return fail(res, err.status || 500, err.message || 'Unable to update provider');
