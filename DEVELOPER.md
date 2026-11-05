@@ -160,3 +160,15 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 - 2026-10-18: Package detail page (migration 002, `GET /api/packages/:id`, path-parameter routing, `package.html`).
 - 2026-10-17: Destinations and packages (tables, migration 001, seed, list endpoints, pages, local images).
 - 2026-10-17: Initial foundation (server, static serving, health endpoint, DB pool, roles/users schema).
+
+
+## Provider departure management
+
+Approved providers can manage departures only for their own approved packages.
+- `GET /api/provider/departure-packages`
+- `GET /api/provider/departures`
+- `POST /api/provider/departures`
+- `PUT /api/provider/departures/:id`
+- `DELETE /api/provider/departures/:id`
+
+Departure capacity is validated against non-cancelled booked seats. A departure with booking history cannot be deleted. The existing `package_departures` table from migration `005_departures_bookings.sql` is reused; no database migration is required.

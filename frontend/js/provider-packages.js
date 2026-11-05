@@ -93,6 +93,10 @@ function renderProviderPackages(packages) {
       edit.className = 'btn btn-secondary';
       edit.textContent = 'Edit';
       edit.addEventListener('click', () => openPackageForm(pkg));
+      const departures = document.createElement('a');
+      departures.className = 'btn btn-secondary';
+      departures.href = `/provider-departures.html?package_id=${pkg.id}`;
+      departures.textContent = 'Departures';
       const archive = document.createElement('button');
       archive.type = 'button';
       archive.className = 'btn btn-danger';
@@ -107,7 +111,7 @@ function renderProviderPackages(packages) {
           showPackageAlert(err.message);
         }
       });
-      actions.append(edit, archive);
+      actions.append(edit, departures, archive);
     }
     card.append(details, actions);
     list.appendChild(card);

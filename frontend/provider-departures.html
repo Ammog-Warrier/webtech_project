@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manage departures · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a><a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a><a href="/provider-dashboard.html">Dashboard</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container provider-packages-page">
+    <div class="provider-dashboard-heading">
+      <div><p class="eyebrow">PROVIDER PORTAL</p><h1>Manage departures</h1>
+        <p class="muted">Schedule departure dates and manage seat capacity for your approved packages.</p></div>
+      <a class="btn btn-secondary" href="/provider-packages.html">Back to packages</a>
+    </div>
+    <p id="provider-departures-alert" class="auth-alert" role="alert" aria-live="polite"></p>
+
+    <section id="departure-editor" class="profile-card">
+      <h2 id="departure-editor-title">Add departure</h2>
+      <form id="provider-departure-form">
+        <div class="form-grid">
+          <label>Approved package<select name="package_id" id="departure-package" required><option value="">Choose package</option></select></label>
+          <label>Departure date<input name="start_date" type="date" required></label>
+          <label>Available seats<input name="seats_total" type="number" min="1" max="65535" value="12" required></label>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit" id="save-departure-btn">Add departure</button>
+          <button class="btn btn-secondary" type="button" id="cancel-departure-edit" hidden>Cancel edit</button>
+        </div>
+      </form>
+    </section>
+
+    <section aria-labelledby="departure-list-heading">
+      <h2 id="departure-list-heading">Your scheduled departures</h2>
+      <div id="provider-departure-list" class="provider-package-list"><p class="muted">Loading departures…</p></div>
+    </section>
+  </div></main>
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+  <script src="/js/api.js"></script><script src="/js/auth.js"></script><script src="/js/main.js"></script><script src="/js/provider-departures.js"></script>
+</body>
+</html>

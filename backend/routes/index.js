@@ -18,6 +18,13 @@ const {
   requireApprovedProvider,
 } = require('../middleware/auth');
 const {
+  getMyDepartures,
+  getDeparturePackages,
+  createDeparture,
+  updateDeparture,
+  deleteDeparture,
+} = require('../controllers/providerDepartureController');
+const {
   getMyPackages,
   getPackageFormOptions,
   createPackage,
@@ -48,6 +55,11 @@ const routes = {
   'POST /api/provider/packages': requireApprovedProvider(createPackage),
   'PUT /api/provider/packages/:id': requireApprovedProvider(updatePackage),
   'DELETE /api/provider/packages/:id': requireApprovedProvider(deletePackage),
+  'GET /api/provider/departure-packages': requireApprovedProvider(getDeparturePackages),
+  'GET /api/provider/departures': requireApprovedProvider(getMyDepartures),
+  'POST /api/provider/departures': requireApprovedProvider(createDeparture),
+  'PUT /api/provider/departures/:id': requireApprovedProvider(updateDeparture),
+  'DELETE /api/provider/departures/:id': requireApprovedProvider(deleteDeparture),
 
   // Customer role only
   'POST /api/bookings': requireRole('CUSTOMER', createNewBooking),
