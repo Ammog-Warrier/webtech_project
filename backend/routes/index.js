@@ -60,6 +60,12 @@ const {
   updatePackageStatus: updateAdminPackageStatus,
 } = require('../controllers/adminPackageController');
 
+// Admin booking monitoring (read only)
+const {
+  getBookings: getAdminBookings,
+  getBookingDetails: getAdminBookingDetails,
+} = require('../controllers/adminBookingController');
+
 const {
   requireAuth,
   requireRole,
@@ -218,6 +224,17 @@ const routes = {
   'PATCH /api/admin/packages/:id/status': requireRole(
     ['ADMIN', 'SUPER_ADMIN'],
     updateAdminPackageStatus
+  ),
+
+  // Admin booking monitoring
+  'GET /api/admin/bookings': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    getAdminBookings
+  ),
+
+  'GET /api/admin/bookings/:id': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    getAdminBookingDetails
   ),
 
   // Provider dashboard

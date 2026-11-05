@@ -123,6 +123,73 @@ section('Admin package moderation', async (t) => {
   check('archived package cannot be moderated -> 409', archived.status === 409, archived.body);
 });
 
+// Creates a customer booking through the API and registers its cleanup.
+async function makeBooking(t, { pay = false, guests = 1, packageId = 1 } = {}) {
+  const deps = await api('GET', `/api/packages/${packageId}/departures`);
+  const departure = deps.data[deps.data.length - 1];
+  const created = await api('POST', '/api/bookings', {
+    token: t.customer, body: { departure_id: departure.id, num_guests: guests },
+  });
+  if (created.status >= 300) throw new Error(`Booking failed: ${JSON.stringify(created.body)}`);
+  const id = created.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM reviews WHERE booking_id = ?', [id]);
+    await pool.execute('DELETE FROM payments WHERE booking_id = ?', [id]);
+    await pool.execute('DELETE FROM bookings WHERE id = ?', [id]);
+  });
+  if (pay) {
+    const paid = await api('POST', `/api/bookings/${id}/pay`, { token: t.customer, body: { method: 'UPI' } });
+    if (paid.status >= 300) throw new Error(`Payment failed: ${JSON.stringify(paid.body)}`);
+  }
+  return { id, departure };
+}
+
+section('Admin booking monitoring', async (t) => {
+  check('no token -> 401', (await api('GET', '/api/admin/bookings')).status === 401);
+  check('customer -> 403', (await api('GET', '/api/admin/bookings', { token: t.customer })).status === 403);
+  check('provider -> 403', (await api('GET', '/api/admin/bookings', { token: t.provider })).status === 403);
+  check('customer -> 403 on detail', (await api('GET', '/api/admin/bookings/1', { token: t.customer })).status === 403);
+
+  const paid = await makeBooking(t, { pay: true, guests: 2 });
+  const pending = await makeBooking(t, { pay: false });
+  const cancelled = await makeBooking(t, { pay: true });
+  const cancel = await api('POST', `/api/bookings/${cancelled.id}/cancel`, { token: t.customer });
+  check('setup: cancel refunds payment', cancel.status === 200, cancel.body);
+
+  const all = await api('GET', '/api/admin/bookings', { token: t.admin });
+  check('admin lists all bookings', all.status === 200 && [paid, pending, cancelled].every((b) => all.data.some((x) => x.id === b.id)));
+  const row = all.data.find((x) => x.id === paid.id);
+  check('row has customer, package, provider and payment', row.customer_email === 'customer@example.com' && row.package_title && row.provider_name === 'Demo Provider' && row.payment_status === 'PAID' && row.status === 'CONFIRMED', row);
+
+  const byStatus = await api('GET', '/api/admin/bookings?status=CANCELLED', { token: t.admin });
+  check('status filter', byStatus.data.every((x) => x.status === 'CANCELLED') && byStatus.data.some((x) => x.id === cancelled.id));
+  const unpaid = await api('GET', '/api/admin/bookings?payment_status=UNPAID', { token: t.admin });
+  check('payment_status=UNPAID filter', unpaid.data.some((x) => x.id === pending.id) && unpaid.data.every((x) => x.payment_status === 'UNPAID'));
+  const refunded = await api('GET', '/api/admin/bookings?payment_status=REFUNDED', { token: t.admin });
+  check('payment_status=REFUNDED filter', refunded.data.some((x) => x.id === cancelled.id));
+  const search = await api('GET', '/api/admin/bookings?search=customer@example.com', { token: t.superadmin });
+  check('search by email (super admin allowed)', search.status === 200 && search.data.length >= 3);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const range = await api('GET', `/api/admin/bookings?from=${today}&to=${today}`, { token: t.admin });
+  check('date range filter includes today\'s bookings', range.status === 200 && range.data.some((x) => x.id === paid.id));
+  const future = await api('GET', '/api/admin/bookings?from=2999-01-01', { token: t.admin });
+  check('future range is empty', future.status === 200 && future.data.length === 0);
+  check('bad date -> 400', (await api('GET', '/api/admin/bookings?from=2026-13-40', { token: t.admin })).status === 400);
+  check('from after to -> 400', (await api('GET', '/api/admin/bookings?from=2026-05-02&to=2026-05-01', { token: t.admin })).status === 400);
+  check('bad status -> 400', (await api('GET', '/api/admin/bookings?status=X', { token: t.admin })).status === 400);
+  check('bad payment_status -> 400', (await api('GET', '/api/admin/bookings?payment_status=X', { token: t.admin })).status === 400);
+  const paged = await api('GET', '/api/admin/bookings?page=1&limit=2', { token: t.admin });
+  check('pagination', paged.status === 200 && paged.data.items.length === 2 && paged.data.total >= 3);
+
+  const detail = await api('GET', `/api/admin/bookings/${paid.id}`, { token: t.admin });
+  check('detail', detail.status === 200 && detail.data.id === paid.id && detail.data.num_guests === 2);
+  check('detail bad id -> 400', (await api('GET', '/api/admin/bookings/x', { token: t.admin })).status === 400);
+  check('detail missing -> 404', (await api('GET', '/api/admin/bookings/99999999', { token: t.admin })).status === 404);
+  const write = await api('POST', `/api/admin/bookings/${paid.id}/cancel`, { token: t.admin });
+  check('admin cannot modify bookings (no write route)', write.status === 404);
+});
+
 // SECTIONS-END (new sections are added above this line)
 
 async function main() {
