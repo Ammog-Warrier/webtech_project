@@ -4,6 +4,7 @@ const routes = require('./routes');
 const { serveStatic } = require('./middleware/static');
 const { fail } = require('./utils/response');
 const { matchRoute } = require('./utils/matchRoute');
+const { isBlockedByMaintenance } = require('./middleware/maintenance');
 const { testConnection } = require('./config/db');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -13,6 +14,9 @@ const server = http.createServer(async (req, res) => {
     const { pathname } = new URL(req.url, `http://${req.headers.host}`);
 
     if (pathname.startsWith('/api/')) {
+      if (await isBlockedByMaintenance(req, pathname)) {
+        return fail(res, 503, 'The site is under maintenance. Please try again later.');
+      }
       const match = matchRoute(routes, req.method, pathname);
       if (!match) return fail(res, 404, 'API route not found');
       req.params = match.params;

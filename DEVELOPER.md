@@ -66,6 +66,9 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/superadmin/permissions | SUPER_ADMIN | All grantable permissions: `[{ name, description }]` |
 | GET | /api/superadmin/admins/:id/permissions | SUPER_ADMIN | `{ admin_id, permissions: [...] }`; 404 if the id is not an ADMIN |
 | PUT | /api/superadmin/admins/:id/permissions | SUPER_ADMIN | Replace the admin's full permission set. Body: `permissions` (array of names, 400 for unknown names or a non-array). Effective immediately. Logged as `ADMIN_PERMISSIONS_UPDATED` |
+| GET | /api/superadmin/logs | SUPER_ADMIN | Audit log viewer, newest first, with actor name/email/role. Filters: `user_id`, `action` (exact, e.g. `CATEGORY_CREATED`), `entity` (e.g. `categories`), `search` (details, actor name or email), `from` / `to` (`YYYY-MM-DD`). **Always paginated** (default `limit` 20, max 100): `{ items, page, limit, total, total_pages }` |
+| GET | /api/superadmin/settings | SUPER_ADMIN | All settings: `setting_key`, `setting_value`, `description`, `updated_at` |
+| PUT | /api/superadmin/settings/:key | SUPER_ADMIN | Body: `value`. Only existing settings with a validation rule can be changed (404 otherwise, 400 for invalid values). Logged as `SETTING_UPDATED` with the old and new value |
 | GET | /api/admin/dashboard | ADMIN, SUPER_ADMIN | Platform-wide customer, provider, package, destination, category, booking and payment summary; includes today's registrations and bookings |
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
 | GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
@@ -96,13 +99,14 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | reviews | `booking_id` FK (unique, one review per booking), `rating` 1-5 (CHECK), `comment` |
 | audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at`. *Note on specification alignment:* corresponds to `system_logs` in the project spec; standardizes column names with our entity foreign key pattern. |
 | admin_permissions | Permissions granted to ADMIN accounts by a super admin: `admin_id` FK to users, `permission` (one of the names in the Admin permissions section), `created_at`; unique per (admin, permission) |
-| settings | Extensible key-value store for application/system settings: `setting_key` PK, `setting_value`, `description`, `updated_at` |
+| settings | Key-value store for system settings: `setting_key` PK, `setting_value`, `description`, `updated_at`. Editable keys and their rules are in `backend/utils/settings.js`: `maintenance_mode` (`true`/`false`) and `booking_cancellation_hours_limit` (whole hours, 0-720) |
 | addresses | User address records: `user_id` FK to users (unique, enforced by migration 010), `street`, `city`, `state`, `postal_code`, `country`, `created_at` |
 
 ### Authentication
 Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client sends it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`. `backend/middleware/auth.js` provides `requireAuth(handler)` and `requireRole(allowedRoles, handler)`.
 
 ### Business rules (enforced in services, not just the UI)
+- **Maintenance mode:** when the `maintenance_mode` setting is `true`, every `/api` request except `/api/health` and `/api/auth/login` returns 503 unless it carries a valid ADMIN or SUPER_ADMIN token; static pages stay available so the login page loads. The setting is cached for up to 5 seconds (changes through the API apply immediately).
 - **Revenue figures:** a payment row is either `PAID` or `REFUNDED` (cancelling a confirmed booking flips it). So `paid_total` is money still held, `refunded_total` is money returned, and `net_total` equals `paid_total`; `gross_total` (admin report) is paid plus refunded.
 - **Seats left** for a departure = `seats_total` minus the `num_guests` of its PENDING and CONFIRMED bookings. A booking must not exceed it.
 - **Concurrency & Pessimistic Locking:** Booking creation locks the `package_departures` row using `SELECT ... FOR UPDATE` before re-evaluating seat availability and writing the booking row inside the same transaction.
@@ -112,7 +116,7 @@ Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`
 - **Reviews:** only for the customer's own COMPLETED booking (or confirmed where trip end date has passed), once per booking. Verified independently inside `createReview()`.
 - **Address management:** each user has one address in `addresses` with a UNIQUE constraint on `user_id`, upserted via `INSERT ... ON DUPLICATE KEY UPDATE`.
 - **Provider approval:** new providers start PENDING; an admin approves/rejects. New packages start PENDING; an admin approves/rejects them.
-- **Audit logging:** admin and super admin actions write a row to `audit_logs` through `logAction(userId, action, entity, entityId, details)` in `backend/services/auditService.js`. Logging is best effort (a failure is printed to the server console and never breaks the action). Actions logged so far: `CUSTOMER_BLOCKED/UNBLOCKED`, `PROVIDER_APPROVED/REJECTED/BLOCKED/UNBLOCKED`, `DESTINATION_CREATED/UPDATED/DELETED`, `CATEGORY_CREATED/UPDATED/DELETED`, `PACKAGE_APPROVED/REJECTED`, `ADMIN_CREATED/UPDATED/ENABLED/DISABLED/DELETED`, `ADMIN_PERMISSIONS_UPDATED`. New admin features must log their changes the same way.
+- **Audit logging:** admin and super admin actions write a row to `audit_logs` through `logAction(userId, action, entity, entityId, details)` in `backend/services/auditService.js`. Logging is best effort (a failure is printed to the server console and never breaks the action). Actions logged so far: `CUSTOMER_BLOCKED/UNBLOCKED`, `PROVIDER_APPROVED/REJECTED/BLOCKED/UNBLOCKED`, `DESTINATION_CREATED/UPDATED/DELETED`, `CATEGORY_CREATED/UPDATED/DELETED`, `PACKAGE_APPROVED/REJECTED`, `ADMIN_CREATED/UPDATED/ENABLED/DISABLED/DELETED`, `ADMIN_PERMISSIONS_UPDATED`, `SETTING_UPDATED`. New admin features must log their changes the same way.
 
 ### Admin permissions
 ADMIN accounts only reach the admin endpoints they have been granted; SUPER_ADMIN always passes. Enforced by `requirePermission()` in `backend/middleware/auth.js` (403 `You do not have permission to perform this action`); changes take effect on the next request. The admin dashboard needs no permission. Names live in `backend/utils/permissions.js`:
@@ -188,6 +192,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Step 5.3/5.4 Super admin system tools: `GET /api/superadmin/logs` (filters, SQL pagination), `GET /api/superadmin/settings`, `PUT /api/superadmin/settings/:key` with per-key validation. `maintenance_mode` is now enforced for non-admin API requests (503).
 - 2026-11-06: Step 5.2 Admin permissions: `requirePermission()` middleware now guards every admin endpoint (except the dashboard); `GET /api/superadmin/permissions`, `GET/PUT /api/superadmin/admins/:id/permissions`; optional `permissions` when creating an admin; `/api/auth/me` returns `permissions` for admins; migration 012 grants existing admins everything; `seed.sql` grants the demo admin everything.
 - 2026-11-06: Step 5.1 Super admin admin-account management: `/api/superadmin/admins` (list, create, get, update, enable/disable, delete), all logged. `tests/api.test.js` now removes the audit entries it creates.
 - 2026-11-06: Admin reports: `GET /api/admin/reports`. Pagination now works on the customers, providers, destinations and categories admin lists. Fixes: net revenue no longer subtracts refunds twice (provider finance, provider reports, admin dashboard `net_collected`); admin category search now works.

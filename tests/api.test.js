@@ -124,9 +124,9 @@ section('Admin package moderation', async (t) => {
 });
 
 // Creates a customer booking through the API and registers its cleanup.
-async function makeBooking(t, { pay = false, guests = 1, packageId = 1 } = {}) {
+async function makeBooking(t, { pay = false, guests = 1, packageId = 1, earliest = false } = {}) {
   const deps = await api('GET', `/api/packages/${packageId}/departures`);
-  const departure = deps.data[deps.data.length - 1];
+  const departure = earliest ? deps.data[0] : deps.data[deps.data.length - 1];
   const created = await api('POST', '/api/bookings', {
     token: t.customer, body: { departure_id: departure.id, num_guests: guests },
   });
@@ -387,6 +387,109 @@ section('Admin permissions', async (t) => {
   check('admin created without permissions starts with none (least privilege)', bare.status === 201 && bare.data.permissions.length === 0);
 
   check('super admin passes every permission check', (await Promise.all(['customers', 'providers', 'packages', 'destinations', 'categories', 'bookings', 'reports'].map((x) => api('GET', `/api/admin/${x}`, { token: t.superadmin })))).every((r) => r.status === 200));
+});
+
+section('Super admin: logs viewer', async (t) => {
+  const url = '/api/superadmin/logs';
+  check('no token -> 401', (await api('GET', url)).status === 401);
+  check('customer -> 403', (await api('GET', url, { token: t.customer })).status === 403);
+  check('provider -> 403', (await api('GET', url, { token: t.provider })).status === 403);
+  check('admin -> 403', (await api('GET', url, { token: t.admin })).status === 403);
+
+  // Produce known log entries: one by the super admin, one by the demo admin
+  const name = `LogTest ${RUN}`;
+  const made = await api('POST', '/api/admin/categories', { token: t.superadmin, body: { name, description: 'log test' } });
+  cleanups.push(() => pool.execute('DELETE FROM categories WHERE id = ?', [made.data.id]));
+  await api('PUT', `/api/admin/categories/${made.data.id}`, { token: t.admin, body: { name, description: 'edited' } });
+
+  const logs = await api('GET', `${url}?search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('logs list (paginated envelope by default)', logs.status === 200 && Array.isArray(logs.data.items) && logs.data.limit === 20 && logs.data.total === 2, logs.body);
+  const [newest, oldest] = logs.data.items;
+  check('newest first', newest.action === 'CATEGORY_UPDATED' && oldest.action === 'CATEGORY_CREATED');
+  check('entry has actor, role, entity and details', oldest.user_email === 'superadmin@example.com' && oldest.user_role === 'SUPER_ADMIN' && oldest.entity === 'categories' && oldest.entity_id === made.data.id && oldest.details === name && /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(oldest.created_at), oldest);
+  check('updated entry was written by the admin', newest.user_email === 'admin@example.com');
+
+  const byAction = await api('GET', `${url}?action=category_created&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('action filter (case-insensitive)', byAction.data.total === 1 && byAction.data.items[0].action === 'CATEGORY_CREATED');
+  const byUser = await api('GET', `${url}?user_id=${newest.user_id}&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('user_id filter', byUser.data.total === 1 && byUser.data.items[0].user_email === 'admin@example.com');
+  const byEntity = await api('GET', `${url}?entity=categories&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('entity filter', byEntity.data.total === 2);
+  const none = await api('GET', `${url}?entity=destinations&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('entity filter excludes others', none.data.total === 0 && none.data.items.length === 0);
+  const byActor = await api('GET', `${url}?search=admin@example.com&action=CATEGORY_UPDATED`, { token: t.superadmin });
+  check('search matches actor email', byActor.data.items.some((x) => x.details === name));
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  check('date range includes today', (await api('GET', `${url}?from=${today}&to=${today}&search=${encodeURIComponent(name)}`, { token: t.superadmin })).data.total === 2);
+  check('future range is empty', (await api('GET', `${url}?from=2999-01-01`, { token: t.superadmin })).data.total === 0);
+
+  const page1 = await api('GET', `${url}?limit=1&page=1&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  const page2 = await api('GET', `${url}?limit=1&page=2&search=${encodeURIComponent(name)}`, { token: t.superadmin });
+  check('pagination pages differ', page1.data.items.length === 1 && page2.data.items.length === 1 && page1.data.items[0].id !== page2.data.items[0].id && page1.data.total_pages === 2);
+  check('page past the end is empty', (await api('GET', `${url}?limit=1&page=9&search=${encodeURIComponent(name)}`, { token: t.superadmin })).data.items.length === 0);
+  check('limit too large -> 400', (await api('GET', `${url}?limit=1000`, { token: t.superadmin })).status === 400);
+  check('bad user_id -> 400', (await api('GET', `${url}?user_id=abc`, { token: t.superadmin })).status === 400);
+  check('bad date -> 400', (await api('GET', `${url}?from=yesterday`, { token: t.superadmin })).status === 400);
+  check('search is not an SQL hole', (await api('GET', `${url}?search=${encodeURIComponent("' OR 1=1 --")}`, { token: t.superadmin })).data.total === 0);
+});
+
+section('Super admin: settings', async (t) => {
+  const url = '/api/superadmin/settings';
+  check('no token -> 401', (await api('GET', url)).status === 401);
+  check('admin -> 403 (list)', (await api('GET', url, { token: t.admin })).status === 403);
+  check('admin -> 403 (update)', (await api('PUT', `${url}/maintenance_mode`, { token: t.admin, body: { value: 'true' } })).status === 403);
+  check('customer -> 403', (await api('GET', url, { token: t.customer })).status === 403);
+
+  const list = await api('GET', url, { token: t.superadmin });
+  const original = Object.fromEntries(list.data.map((x) => [x.setting_key, x.setting_value]));
+  check('list has the editable settings', list.status === 200 && 'maintenance_mode' in original && 'booking_cancellation_hours_limit' in original && list.data.every((x) => x.description));
+  const restore = async () => {
+    await pool.execute("UPDATE settings SET setting_value = ? WHERE setting_key = 'maintenance_mode'", [original.maintenance_mode]);
+    await pool.execute("UPDATE settings SET setting_value = ? WHERE setting_key = 'booking_cancellation_hours_limit'", [original.booking_cancellation_hours_limit]);
+  };
+  cleanups.push(restore);
+
+  check('unknown key -> 404', (await api('PUT', `${url}/nope`, { token: t.superadmin, body: { value: 'x' } })).status === 404);
+  check('missing value -> 400', (await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: {} })).status === 400);
+  check('maintenance_mode: invalid -> 400', (await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: { value: 'maybe' } })).status === 400);
+  for (const bad of ['abc', '-1', '1.5', 721, '']) {
+    check(`hours limit ${JSON.stringify(bad)} -> 400`, (await api('PUT', `${url}/booking_cancellation_hours_limit`, { token: t.superadmin, body: { value: bad } })).status === 400);
+  }
+
+  const set = await api('PUT', `${url}/booking_cancellation_hours_limit`, { token: t.superadmin, body: { value: 12 } });
+  check('update hours limit (number accepted, stored as text)', set.status === 200 && set.data.setting_value === '12', set.body);
+  check('boolean accepted for maintenance_mode', (await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: { value: false } })).data.setting_value === 'false');
+
+  // The cancellation limit is really used by the booking flow
+  await api('PUT', `${url}/booking_cancellation_hours_limit`, { token: t.superadmin, body: { value: 720 } });
+  const tooLate = await makeBooking(t, { pay: true, earliest: true, packageId: 3 });
+  const refused = await api('POST', `/api/bookings/${tooLate.id}/cancel`, { token: t.customer });
+  check('limit of 720h blocks cancelling a departure ~3 weeks away', refused.status === 400 && /720 hours/.test(refused.error.message), refused.body);
+  await api('PUT', `${url}/booking_cancellation_hours_limit`, { token: t.superadmin, body: { value: 24 } });
+  const allowed = await api('POST', `/api/bookings/${tooLate.id}/cancel`, { token: t.customer });
+  check('limit of 24h allows the same cancellation', allowed.status === 200, allowed.body);
+
+  // maintenance mode is really enforced
+  const on = await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: { value: 'true' } });
+  check('enable maintenance mode', on.status === 200 && on.data.setting_value === 'true');
+  try {
+    check('public API -> 503', (await api('GET', '/api/packages')).status === 503);
+    check('customer API -> 503', (await api('GET', '/api/bookings/my', { token: t.customer })).status === 503);
+    check('provider API -> 503', (await api('GET', '/api/provider/dashboard', { token: t.provider })).status === 503);
+    check('invalid token -> 503', (await api('GET', '/api/packages', { token: 'garbage' })).status === 503);
+    check('health stays open', (await api('GET', '/api/health')).status === 200);
+    check('login stays open', (await api('POST', '/api/auth/login', { body: { email: 'customer@example.com', password: PASSWORD } })).status === 200);
+    check('admin keeps working', (await api('GET', '/api/admin/dashboard', { token: t.admin })).status === 200);
+    check('super admin keeps working', (await api('GET', url, { token: t.superadmin })).status === 200);
+    check('web pages stay available', (await fetch(`${BASE}/`)).status === 200);
+  } finally {
+    await api('PUT', `${url}/maintenance_mode`, { token: t.superadmin, body: { value: 'false' } });
+  }
+  check('maintenance off: public API works again', (await api('GET', '/api/packages')).status === 200);
+
+  const logs = await api('GET', '/api/superadmin/logs?action=SETTING_UPDATED&limit=100', { token: t.superadmin });
+  check('setting changes are logged with old and new value', logs.data.items.some((x) => x.details === 'maintenance_mode: false -> true'), logs.data.items.slice(0, 3));
 });
 
 // SECTIONS-END (new sections are added above this line)

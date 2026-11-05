@@ -86,6 +86,13 @@ const {
   updatePermissions: updateAdminPermissionList,
 } = require('../controllers/superAdminPermissionController');
 
+// Super admin: logs and settings
+const {
+  getLogs: getSuperAdminLogs,
+  getSettings: getSuperAdminSettings,
+  putSetting: putSuperAdminSetting,
+} = require('../controllers/superAdminSystemController');
+
 const {
   requireAuth,
   requireRole,
@@ -276,6 +283,11 @@ const routes = {
   'GET /api/superadmin/permissions': requireRole('SUPER_ADMIN', listPermissions),
   'GET /api/superadmin/admins/:id/permissions': requireRole('SUPER_ADMIN', getAdminPermissionList),
   'PUT /api/superadmin/admins/:id/permissions': requireRole('SUPER_ADMIN', updateAdminPermissionList),
+
+  // Super admin: system logs and settings
+  'GET /api/superadmin/logs': requireRole('SUPER_ADMIN', getSuperAdminLogs),
+  'GET /api/superadmin/settings': requireRole('SUPER_ADMIN', getSuperAdminSettings),
+  'PUT /api/superadmin/settings/:key': requireRole('SUPER_ADMIN', putSuperAdminSetting),
 
   // Provider dashboard
   'GET /api/provider/dashboard': requireRole(
