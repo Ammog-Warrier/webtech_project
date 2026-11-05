@@ -74,6 +74,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
 | GET | /api/packages/:id | Public | One package with detail fields (`itinerary` and `inclusions` as arrays, `max_group_size`); 400 if id is not an integer, 404 if missing |
 | GET | /api/packages/:id/departures | Public | Available departures for an approved package starting from today with live calculated remaining seats (`seats_available`) |
+| GET | /api/packages/:id/calendar?month=YYYY-MM | Public | Booking calendar for an approved package: the departures starting in that month (default: current month) as `days: [{ date, end_date, departure_id, seats_total, seats_available, status }]`. `end_date` is the last day of the trip. `status` is `AVAILABLE`, `LIMITED` (25% or fewer seats left), `SOLD_OUT` or `PAST`. 400 bad month or id, 404 unknown or unapproved package |
 | POST | /api/auth/register | Public | Create an account. Body: `full_name`, `email`, `password` (8-72 chars), optional `phone`, optional `role` (`CUSTOMER` default, or `PROVIDER`; providers start with `provider_status` PENDING). Returns the user (201). 400 invalid input, 409 email already registered. Admin accounts cannot be self-registered |
 | POST | /api/auth/login | Public | Body: `email`, `password`. Returns `{ token, user }`. 400 missing fields, 401 wrong email or password (same message for both), 403 account disabled |
 | GET | /api/auth/me | Bearer token | Return currently authenticated user (`id, full_name, email, phone, role, provider_status`; ADMIN and SUPER_ADMIN also get `permissions`, an array of their effective permission names). 401 unauthenticated, 403 account disabled |
@@ -82,6 +83,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/wishlist | CUSTOMER | Saved packages, newest first (`package_id, title, price, duration_days, image_url, destination_name, category_name, added_at`). Only APPROVED packages are shown; a package that is later rejected or archived stays saved but hidden |
 | POST | /api/wishlist | CUSTOMER | Body: `package_id`. Only APPROVED packages (404 otherwise, 400 for a bad id). Idempotent: 201 when added, 200 if already saved. Returns `{ package_id, wishlisted: true }` |
 | DELETE | /api/wishlist/:packageId | CUSTOMER | Idempotent: always 200 with `{ package_id, wishlisted: false, removed }` (`removed` is false if it was not saved); 400 for a bad id |
+| GET | /api/bookings/calendar?month=YYYY-MM | CUSTOMER | The customer's own bookings whose trip starts in that month (default: current month), all statuses: `bookings: [{ booking_id, status, num_guests, date, end_date, package_id, package_title, destination_name }]` |
 | POST | /api/bookings | CUSTOMER | Create booking reserving seats. Body: `departure_id`, `num_guests`. Locks departure row, verifies seat availability against PENDING/CONFIRMED reservations, computes total_price snapshot, returns booking in PENDING status (201) |
 | GET | /api/bookings/my | CUSTOMER | Return all bookings for the logged-in customer with departure date, destination, payment status, and review status |
 | POST | /api/bookings/:id/pay | CUSTOMER | Simulate payment for a PENDING booking. Body: `method` (`CARD`, `UPI`, `NET_BANKING`). Locks booking, records payment (PAID), transitions booking to CONFIRMED atomically |
@@ -110,6 +112,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client sends it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`. `backend/middleware/auth.js` provides `requireAuth(handler)` and `requireRole(allowedRoles, handler)`.
 
 ### Business rules (enforced in services, not just the UI)
+- **Completed trips:** a CONFIRMED booking counts as finished once the current date is on or after `start_date + duration_days`. The customer view derives this on the fly, and `completePastBookings()` (run at server start and then hourly) stores `COMPLETED` so admin and provider statistics, which read the stored status, are accurate.
 - **Maintenance mode:** when the `maintenance_mode` setting is `true`, every `/api` request except `/api/health` and `/api/auth/login` returns 503 unless it carries a valid ADMIN or SUPER_ADMIN token; static pages stay available so the login page loads. The setting is cached for up to 5 seconds (changes through the API apply immediately).
 - **Revenue figures:** a payment row is either `PAID` or `REFUNDED` (cancelling a confirmed booking flips it). So `paid_total` is money still held, `refunded_total` is money returned, and `net_total` equals `paid_total`; `gross_total` (admin report) is paid plus refunded.
 - **Seats left** for a departure = `seats_total` minus the `num_guests` of its PENDING and CONFIRMED bookings. A booking must not exceed it.
@@ -197,6 +200,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Booking calendar: `GET /api/packages/:id/calendar` and `GET /api/bookings/calendar` (month view with live seat status). Finished CONFIRMED trips are now stored as COMPLETED by an hourly sweep (`completePastBookings`).
 - 2026-11-06: Wishlist: migration 013 (`wishlists` table), `GET/POST /api/wishlist`, `DELETE /api/wishlist/:packageId`.
 - 2026-11-06: Step 5.3/5.4 Super admin system tools: `GET /api/superadmin/logs` (filters, SQL pagination), `GET /api/superadmin/settings`, `PUT /api/superadmin/settings/:key` with per-key validation. `maintenance_mode` is now enforced for non-admin API requests (503).
 - 2026-11-06: Step 5.2 Admin permissions: `requirePermission()` middleware now guards every admin endpoint (except the dashboard); `GET /api/superadmin/permissions`, `GET/PUT /api/superadmin/admins/:id/permissions`; optional `permissions` when creating an admin; `/api/auth/me` returns `permissions` for admins; migration 012 grants existing admins everything; `seed.sql` grants the demo admin everything.
