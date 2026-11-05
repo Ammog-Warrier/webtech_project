@@ -172,3 +172,12 @@ Approved providers can manage departures only for their own approved packages.
 - `DELETE /api/provider/departures/:id`
 
 Departure capacity is validated against non-cancelled booked seats. A departure with booking history cannot be deleted. The existing `package_departures` table from migration `005_departures_bookings.sql` is reused; no database migration is required.
+
+### Provider booking management (Step 3.4)
+Approved providers can view booking records associated with packages they own:
+- `GET /api/provider/bookings` — list bookings with customer, package, departure and payment details.
+- `GET /api/provider/bookings/:id` — retrieve one owned booking.
+- `POST /api/provider/bookings/:id/confirm` — confirm an owned pending booking only when its payment is marked `PAID`.
+
+All provider booking queries scope records through `packages.provider_id = authenticated user id`. Payment processing currently confirms paid bookings automatically; the provider confirmation action is a guarded fallback.
+Frontend: `/provider-bookings.html`.
