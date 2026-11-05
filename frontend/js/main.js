@@ -201,6 +201,14 @@ function syncNavbarAuth() {
     authContainer.appendChild(userBadge);
     authContainer.appendChild(logoutBtn);
 
+    if (user.role === 'PROVIDER') {
+      const dashboardLink = document.createElement('a');
+      dashboardLink.href = '/provider-dashboard.html';
+      dashboardLink.textContent = 'Provider Dashboard';
+      dashboardLink.className = 'nav-link-provider';
+      authContainer.prepend(dashboardLink);
+    }
+
     if (user.role === 'CUSTOMER') {
       const myBookingsLink = document.createElement('a');
       myBookingsLink.href = '/my-bookings.html';

@@ -46,4 +46,16 @@ function requireRole(allowedRoles, handler) {
   });
 }
 
-module.exports = { requireAuth, requireRole };
+// Use this wrapper for provider operations that require an approved provider account.
+// The provider dashboard itself intentionally remains accessible while approval is pending.
+function requireApprovedProvider(handler) {
+  return requireRole('PROVIDER', async function (req, res) {
+    if (req.user.provider_status !== 'APPROVED') {
+      const status = req.user.provider_status || 'PENDING';
+      return fail(res, 403, `Provider approval required. Current status: ${status}`);
+    }
+    return await handler(req, res);
+  });
+}
+
+module.exports = { requireAuth, requireRole, requireApprovedProvider };

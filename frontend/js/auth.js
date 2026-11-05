@@ -49,7 +49,7 @@ function getRoleDashboardUrl(role) {
     case 'CUSTOMER':
       return '/my-bookings.html';
     case 'PROVIDER':
-      return '/packages.html';
+      return '/provider-dashboard.html';
     case 'ADMIN':
     case 'SUPER_ADMIN':
       return '/destinations.html';

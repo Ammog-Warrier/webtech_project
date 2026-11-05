@@ -11,6 +11,7 @@ const {
   reviewMyBooking,
 } = require('../controllers/bookingController');
 const { getProfile, updateProfile } = require('../controllers/userController');
+const { getDashboard: getProviderDashboard } = require('../controllers/providerController');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 // Route table: 'METHOD /path' -> async handler(req, res)
@@ -28,6 +29,9 @@ const routes = {
   'GET /api/auth/me': requireAuth(getMe),
   'GET /api/users/profile': requireAuth(getProfile),
   'PUT /api/users/profile': requireAuth(updateProfile),
+
+  // Provider role only (dashboard is available before approval so providers can see their status)
+  'GET /api/provider/dashboard': requireRole('PROVIDER', getProviderDashboard),
 
   // Customer role only
   'POST /api/bookings': requireRole('CUSTOMER', createNewBooking),

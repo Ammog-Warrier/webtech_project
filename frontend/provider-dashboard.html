@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Provider Dashboard · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a>
+      <a href="/login.html">Login</a>
+      <a class="btn btn-primary" href="/register.html">Register</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section">
+    <div class="container provider-dashboard">
+      <div class="provider-dashboard-heading">
+        <div>
+          <p class="eyebrow">PROVIDER PORTAL</p>
+          <h1>Provider dashboard</h1>
+          <p class="muted">Track your packages, bookings and customer feedback.</p>
+        </div>
+      </div>
+
+      <div id="provider-status" class="provider-status-panel" role="status" aria-live="polite">
+        <p class="muted">Checking your provider account…</p>
+      </div>
+
+      <div id="provider-dashboard-content" hidden>
+        <section aria-labelledby="package-summary-title">
+          <h2 id="package-summary-title">Packages</h2>
+          <div class="provider-stat-grid">
+            <article class="provider-stat-card"><span>Total packages</span><strong id="stat-total-packages">—</strong></article>
+            <article class="provider-stat-card"><span>Pending approval</span><strong id="stat-pending-packages">—</strong></article>
+            <article class="provider-stat-card"><span>Approved</span><strong id="stat-approved-packages">—</strong></article>
+            <article class="provider-stat-card"><span>Rejected</span><strong id="stat-rejected-packages">—</strong></article>
+          </div>
+        </section>
+
+        <section aria-labelledby="booking-summary-title">
+          <h2 id="booking-summary-title">Bookings</h2>
+          <div class="provider-stat-grid">
+            <article class="provider-stat-card"><span>Total bookings</span><strong id="stat-total-bookings">—</strong></article>
+            <article class="provider-stat-card"><span>Pending</span><strong id="stat-pending-bookings">—</strong></article>
+            <article class="provider-stat-card"><span>Confirmed</span><strong id="stat-confirmed-bookings">—</strong></article>
+            <article class="provider-stat-card"><span>Completed</span><strong id="stat-completed-bookings">—</strong></article>
+          </div>
+        </section>
+
+        <section aria-labelledby="performance-title">
+          <h2 id="performance-title">Performance</h2>
+          <div class="provider-stat-grid provider-stat-grid-small">
+            <article class="provider-stat-card"><span>Paid earnings</span><strong id="stat-earnings">—</strong></article>
+            <article class="provider-stat-card"><span>Average rating</span><strong id="stat-rating">—</strong><small id="stat-review-count" class="muted"></small></article>
+            <article class="provider-stat-card"><span>Upcoming departures</span><strong id="stat-upcoming-departures">—</strong></article>
+          </div>
+          <p class="provider-dashboard-note muted">Earnings include payments marked PAID and exclude refunded payments. This is a summary, not a payout statement.</p>
+        </section>
+      </div>
+
+      <p id="provider-dashboard-error" class="auth-alert" role="alert"></p>
+    </div>
+  </main>
+
+  <footer class="site-footer"><div class="container">
+    <span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span>
+    <p>© Local Tourism Package Booking System</p>
+  </div></footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/provider-dashboard.js"></script>
+</body>
+</html>
