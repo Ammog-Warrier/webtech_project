@@ -54,6 +54,8 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/admin/packages?status=&search= | ADMIN, SUPER_ADMIN | Packages of all providers with provider, destination and category (PENDING first). `status` is `PENDING`, `APPROVED`, `REJECTED` or `ARCHIVED` (400 otherwise). Supports pagination |
 | GET | /api/admin/packages/:id | ADMIN, SUPER_ADMIN | One package with itinerary, inclusions and `rejection_reason`; 400 bad id, 404 missing |
 | PATCH | /api/admin/packages/:id/status | ADMIN, SUPER_ADMIN | Body: `status` (`APPROVED` or `REJECTED`), optional `rejection_reason` (max 255, only stored when rejecting). Approving clears the reason. 409 for ARCHIVED packages. Logged as `PACKAGE_APPROVED/REJECTED` |
+| GET | /api/admin/bookings | ADMIN, SUPER_ADMIN | Read-only list of all bookings with customer, package, destination, provider, payment (`payment_status` is `PAID`, `REFUNDED` or `UNPAID`) and review rating. Filters: `status` (`PENDING`, `CONFIRMED`, `CANCELLED`, `COMPLETED`), `payment_status`, `search` (customer name/email, package, provider), `from` and `to` (`YYYY-MM-DD`, booking date). 400 for invalid filters. Supports pagination |
+| GET | /api/admin/bookings/:id | ADMIN, SUPER_ADMIN | One booking in the same shape; 400 bad id, 404 missing. Admins can monitor bookings but not change them |
 | GET | /api/admin/dashboard | ADMIN, SUPER_ADMIN | Platform-wide customer, provider, package, destination, category, booking and payment summary; includes today's registrations and bookings |
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
 | GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
@@ -160,6 +162,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Admin booking monitoring: `GET /api/admin/bookings` (filters, pagination) and `GET /api/admin/bookings/:id`; `backend/utils/dates.js` date parameter validation; booking tests added to `tests/api.test.js`.
 - 2026-11-06: Admin package moderation: `GET /api/admin/packages`, `GET /api/admin/packages/:id`, `PATCH /api/admin/packages/:id/status`; migration 011 adds `packages.rejection_reason` (shown to the provider); optional pagination helper; `tests/api.test.js` and `npm run test:api`.
 - 2026-11-06: Step 6 audit logging: new `auditService.logAction()`; customer, provider, destination and category admin actions now write to `audit_logs`.
 - 2026-11-06: Documentation sync: documented provider portal endpoints, admin management endpoints and pages, rewrote the Step 4.5 category section, and recorded migration 010 (unique `addresses.user_id`).
