@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node backend/server.js",
     "dev": "nodemon backend/server.js",
-    "db:setup": "echo Run: mysql -u root -p < database/schema.sql && mysql -u root -p < database/seed.sql"
+    "db:setup": "echo Run: mysql -u root -p < database/schema.sql && mysql -u root -p < database/seed.sql",
+    "test:api": "node tests/api.test.js"
   },
   "license": "ISC",
   "dependencies": {

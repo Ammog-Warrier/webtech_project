@@ -53,6 +53,13 @@ const {
   deleteAdminCategory,
 } = require('../controllers/adminCategoryController');
 
+// Admin package moderation
+const {
+  getPackages: getAdminPackages,
+  getPackageDetails: getAdminPackageDetails,
+  updatePackageStatus: updateAdminPackageStatus,
+} = require('../controllers/adminPackageController');
+
 const {
   requireAuth,
   requireRole,
@@ -195,6 +202,22 @@ const routes = {
   'DELETE /api/admin/categories/:id': requireRole(
     ['ADMIN', 'SUPER_ADMIN'],
     deleteAdminCategory
+  ),
+
+  // Admin package moderation
+  'GET /api/admin/packages': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    getAdminPackages
+  ),
+
+  'GET /api/admin/packages/:id': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    getAdminPackageDetails
+  ),
+
+  'PATCH /api/admin/packages/:id/status': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    updateAdminPackageStatus
   ),
 
   // Provider dashboard
