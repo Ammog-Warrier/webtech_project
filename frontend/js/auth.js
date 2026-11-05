@@ -52,7 +52,7 @@ function getRoleDashboardUrl(role) {
       return '/provider-dashboard.html';
     case 'ADMIN':
     case 'SUPER_ADMIN':
-      return '/destinations.html';
+      return '/admin-dashboard.html';
     default:
       return '/packages.html';
   }

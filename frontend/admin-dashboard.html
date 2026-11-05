@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Dashboard · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a>
+      <a href="/admin-dashboard.html" class="active">Admin</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section">
+    <div class="container admin-dashboard">
+      <div class="admin-dashboard-heading">
+        <div>
+          <p class="eyebrow">ADMINISTRATION</p>
+          <h1>Admin dashboard</h1>
+          <p class="muted">Monitor platform activity, accounts, bookings and catalogue health.</p>
+        </div>
+        <button type="button" id="refresh-admin-dashboard" class="btn btn-secondary">Refresh data</button>
+      </div>
+
+      <div id="admin-dashboard-status" class="admin-dashboard-status" role="status" aria-live="polite">Loading platform overview…</div>
+      <p id="admin-dashboard-error" class="auth-alert" role="alert"></p>
+
+      <div id="admin-dashboard-content" hidden>
+        <section aria-labelledby="admin-activity-title">
+          <div class="admin-section-heading"><h2 id="admin-activity-title">Today's activity</h2><span class="muted" id="admin-last-updated"></span></div>
+          <div class="admin-stat-grid admin-stat-grid-small">
+            <article class="admin-stat-card"><span>Registrations today</span><strong id="stat-registrations-today">—</strong></article>
+            <article class="admin-stat-card"><span>Bookings today</span><strong id="stat-bookings-today">—</strong></article>
+            <article class="admin-stat-card"><span>Pending provider approvals</span><strong id="stat-pending-providers">—</strong></article>
+          </div>
+        </section>
+
+        <section aria-labelledby="admin-users-title">
+          <h2 id="admin-users-title">Customers & providers</h2>
+          <div class="admin-stat-grid">
+            <article class="admin-stat-card"><span>Total customers</span><strong id="stat-total-customers">—</strong><small id="stat-active-customers" class="muted"></small></article>
+            <article class="admin-stat-card"><span>Blocked customers</span><strong id="stat-blocked-customers">—</strong></article>
+            <article class="admin-stat-card"><span>Total providers</span><strong id="stat-total-providers">—</strong><small id="stat-approved-providers" class="muted"></small></article>
+            <article class="admin-stat-card"><span>Rejected providers</span><strong id="stat-rejected-providers">—</strong><small id="stat-blocked-providers" class="muted"></small></article>
+          </div>
+        </section>
+
+        <section aria-labelledby="admin-catalogue-title">
+          <h2 id="admin-catalogue-title">Travel catalogue</h2>
+          <div class="admin-stat-grid">
+            <article class="admin-stat-card"><span>Total packages</span><strong id="stat-total-packages">—</strong><small id="stat-approved-packages" class="muted"></small></article>
+            <article class="admin-stat-card"><span>Packages pending review</span><strong id="stat-pending-packages">—</strong></article>
+            <article class="admin-stat-card"><span>Destinations</span><strong id="stat-total-destinations">—</strong></article>
+            <article class="admin-stat-card"><span>Categories</span><strong id="stat-total-categories">—</strong></article>
+          </div>
+        </section>
+
+        <section aria-labelledby="admin-bookings-title">
+          <h2 id="admin-bookings-title">Bookings overview</h2>
+          <div class="admin-stat-grid">
+            <article class="admin-stat-card"><span>Total bookings</span><strong id="stat-total-bookings">—</strong></article>
+            <article class="admin-stat-card"><span>Pending</span><strong id="stat-pending-bookings">—</strong></article>
+            <article class="admin-stat-card"><span>Confirmed</span><strong id="stat-confirmed-bookings">—</strong></article>
+            <article class="admin-stat-card"><span>Completed</span><strong id="stat-completed-bookings">—</strong></article>
+            <article class="admin-stat-card"><span>Cancelled</span><strong id="stat-cancelled-bookings">—</strong></article>
+          </div>
+        </section>
+
+        <section aria-labelledby="admin-finance-title">
+          <h2 id="admin-finance-title">Payment overview</h2>
+          <div class="admin-stat-grid admin-stat-grid-small">
+            <article class="admin-stat-card"><span>Paid revenue</span><strong id="stat-paid-revenue">—</strong></article>
+            <article class="admin-stat-card"><span>Refunded</span><strong id="stat-refunded-amount">—</strong></article>
+            <article class="admin-stat-card"><span>Net collected</span><strong id="stat-net-collected">—</strong></article>
+          </div>
+          <p class="admin-dashboard-note muted">Payment totals include simulated payments recorded by the application. This overview is not a payout or accounting statement.</p>
+        </section>
+
+        <section aria-labelledby="admin-shortcuts-title">
+          <h2 id="admin-shortcuts-title">Administration shortcuts</h2>
+          <div class="admin-shortcut-grid">
+            <a class="admin-shortcut-card" href="/destinations.html"><strong>View destinations</strong><span>Review the public destination catalogue</span></a>
+            <a class="admin-shortcut-card" href="/packages.html"><strong>View packages</strong><span>Browse published travel packages</span></a>
+            <article class="admin-shortcut-card admin-shortcut-upcoming"><strong>Customer & provider management</strong><span>Coming in Step 4.2 and 4.3</span></article>
+            <article class="admin-shortcut-card admin-shortcut-upcoming"><strong>Destination & category management</strong><span>Coming in Step 4.4 and 4.5</span></article>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer"><div class="container">
+    <span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span>
+    <p>© Local Tourism Package Booking System</p>
+  </div></footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/admin-dashboard.js"></script>
+</body>
+</html>

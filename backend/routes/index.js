@@ -15,6 +15,7 @@ const {
 
 const { getProfile, updateProfile } = require('../controllers/userController');
 const { getDashboard: getProviderDashboard } = require('../controllers/providerController');
+const { getDashboard: getAdminDashboard } = require('../controllers/adminDashboardController');
 
 const {
   requireAuth,
@@ -48,7 +49,6 @@ const {
   getMyFinance,
   getMyReviews,
 } = require('../controllers/providerFinanceController');
-const { getMyReports } = require('../controllers/providerReportController');
 
 // Route table: 'METHOD /path' -> async handler(req, res)
 const routes = {
@@ -65,6 +65,9 @@ const routes = {
   'GET /api/auth/me': requireAuth(getMe),
   'GET /api/users/profile': requireAuth(getProfile),
   'PUT /api/users/profile': requireAuth(updateProfile),
+
+  // Admin dashboard
+  'GET /api/admin/dashboard': requireRole(['ADMIN', 'SUPER_ADMIN'], getAdminDashboard),
 
   // Provider dashboard
   'GET /api/provider/dashboard': requireRole('PROVIDER', getProviderDashboard),
@@ -91,7 +94,6 @@ const routes = {
   // Provider earnings and reviews
   'GET /api/provider/finance': requireApprovedProvider(getMyFinance),
   'GET /api/provider/reviews': requireApprovedProvider(getMyReviews),
-  'GET /api/provider/reports': requireApprovedProvider(getMyReports),
 
   // Customer booking management
   'POST /api/bookings': requireRole('CUSTOMER', createNewBooking),
