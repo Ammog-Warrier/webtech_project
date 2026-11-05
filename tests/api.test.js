@@ -492,6 +492,70 @@ section('Super admin: settings', async (t) => {
   check('setting changes are logged with old and new value', logs.data.items.some((x) => x.details === 'maintenance_mode: false -> true'), logs.data.items.slice(0, 3));
 });
 
+section('Customer wishlist', async (t) => {
+  const url = '/api/wishlist';
+  check('no token -> 401', (await api('GET', url)).status === 401);
+  for (const [who, token] of [['provider', t.provider], ['admin', t.admin], ['super admin', t.superadmin]]) {
+    check(`${who} -> 403`, (await api('GET', url, { token })).status === 403);
+  }
+  check('provider cannot add -> 403', (await api('POST', url, { token: t.provider, body: { package_id: 1 } })).status === 403);
+
+  // second customer for isolation checks
+  const otherEmail = `wish.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Wish Tester', email: otherEmail, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const other = await login(otherEmail, 'Secret@123');
+
+  await pool.execute('DELETE FROM wishlists WHERE customer_id = 1');
+  cleanups.push(() => pool.execute('DELETE FROM wishlists WHERE customer_id = 1'));
+  const empty = await api('GET', url, { token: t.customer });
+  check('starts empty', empty.status === 200 && empty.data.length === 0);
+
+  for (const bad of [undefined, 0, -1, 'abc', 1.5]) {
+    check(`package_id ${JSON.stringify(bad)} -> 400`, (await api('POST', url, { token: t.customer, body: { package_id: bad } })).status === 400);
+  }
+  check('unknown package -> 404', (await api('POST', url, { token: t.customer, body: { package_id: 99999999 } })).status === 404);
+
+  const pending = await api('POST', '/api/provider/packages', {
+    token: t.provider,
+    body: { title: `Wish Test ${RUN}`, description: 'd', destination_id: 1, price: 50, duration_days: 1, image_url: '/assets/img/cities.jpg' },
+  });
+  const pid = pending.data.id;
+  cleanups.push(() => pool.execute('DELETE FROM packages WHERE id = ?', [pid]));
+  check('PENDING package cannot be saved -> 404', (await api('POST', url, { token: t.customer, body: { package_id: pid } })).status === 404);
+
+  const first = await api('POST', url, { token: t.customer, body: { package_id: 1 } });
+  check('add -> 201', first.status === 201 && first.data.wishlisted === true, first.body);
+  const again = await api('POST', url, { token: t.customer, body: { package_id: 1 } });
+  check('add again is a no-op -> 200', again.status === 200);
+  await api('POST', url, { token: t.customer, body: { package_id: 2 } });
+
+  const list = await api('GET', url, { token: t.customer });
+  check('list has each package once, newest first', list.data.length === 2 && list.data[0].package_id === 2 && list.data[1].package_id === 1, list.body);
+  const item = list.data[1];
+  check('item has card fields', item.title && item.price && item.duration_days && item.image_url && item.destination_name && item.added_at && 'category_name' in item, item);
+
+  check('other customer has their own empty list', (await api('GET', url, { token: other })).data.length === 0);
+  const foreign = await api('DELETE', `${url}/1`, { token: other });
+  check("other customer's delete does not touch mine", foreign.status === 200 && foreign.data.removed === false && (await api('GET', url, { token: t.customer })).data.length === 2);
+
+  // package visibility follows moderation
+  await api('PATCH', `/api/admin/packages/${pid}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+  await api('POST', url, { token: t.customer, body: { package_id: pid } });
+  check('approved package can be saved', (await api('GET', url, { token: t.customer })).data.some((x) => x.package_id === pid));
+  await api('PATCH', `/api/admin/packages/${pid}/status`, { token: t.admin, body: { status: 'REJECTED' } });
+  check('rejected package disappears from the list', !(await api('GET', url, { token: t.customer })).data.some((x) => x.package_id === pid));
+  await api('PATCH', `/api/admin/packages/${pid}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+  check('and returns when approved again', (await api('GET', url, { token: t.customer })).data.some((x) => x.package_id === pid));
+
+  check('remove bad id -> 400', (await api('DELETE', `${url}/abc`, { token: t.customer })).status === 400);
+  const del = await api('DELETE', `${url}/1`, { token: t.customer });
+  check('remove', del.status === 200 && del.data.removed === true && del.data.wishlisted === false);
+  const delAgain = await api('DELETE', `${url}/1`, { token: t.customer });
+  check('remove again is a no-op -> 200', delAgain.status === 200 && delAgain.data.removed === false);
+  check('list no longer has it', !(await api('GET', url, { token: t.customer })).data.some((x) => x.package_id === 1));
+});
+
 // SECTIONS-END (new sections are added above this line)
 
 async function main() {
