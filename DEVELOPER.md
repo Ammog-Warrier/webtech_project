@@ -46,23 +46,26 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | /api/health | Public | Server and database status |
-| GET | /api/admin/customers, /api/admin/customers/:id; PATCH /api/admin/customers/:id/status | ADMIN, SUPER_ADMIN | Customer management (see "Admin customer management") |
-| GET | /api/admin/providers, /api/admin/providers/:id; PATCH /api/admin/providers/:id/status | ADMIN, SUPER_ADMIN | Provider management (see "Admin provider management") |
-| GET/POST/PUT/DELETE | /api/admin/destinations[/:id] | ADMIN, SUPER_ADMIN | Destination management (see section below) |
-| GET/POST/PUT/DELETE | /api/admin/categories[/:id] | ADMIN, SUPER_ADMIN | Category management (see section below) |
+| GET | /api/admin/customers, /api/admin/customers/:id; PATCH /api/admin/customers/:id/status | ADMIN (MANAGE_CUSTOMERS), SUPER_ADMIN | Customer management (see "Admin customer management") |
+| GET | /api/admin/providers, /api/admin/providers/:id; PATCH /api/admin/providers/:id/status | ADMIN (MANAGE_PROVIDERS), SUPER_ADMIN | Provider management (see "Admin provider management") |
+| GET/POST/PUT/DELETE | /api/admin/destinations[/:id] | ADMIN (MANAGE_CATALOGUE), SUPER_ADMIN | Destination management (see section below) |
+| GET/POST/PUT/DELETE | /api/admin/categories[/:id] | ADMIN (MANAGE_CATALOGUE), SUPER_ADMIN | Category management (see section below) |
 | GET | /api/provider/* | PROVIDER | Provider portal endpoints (see "Provider portal endpoints") |
-| GET | /api/admin/packages?status=&search= | ADMIN, SUPER_ADMIN | Packages of all providers with provider, destination and category (PENDING first). `status` is `PENDING`, `APPROVED`, `REJECTED` or `ARCHIVED` (400 otherwise). Supports pagination |
-| GET | /api/admin/packages/:id | ADMIN, SUPER_ADMIN | One package with itinerary, inclusions and `rejection_reason`; 400 bad id, 404 missing |
-| PATCH | /api/admin/packages/:id/status | ADMIN, SUPER_ADMIN | Body: `status` (`APPROVED` or `REJECTED`), optional `rejection_reason` (max 255, only stored when rejecting). Approving clears the reason. 409 for ARCHIVED packages. Logged as `PACKAGE_APPROVED/REJECTED` |
-| GET | /api/admin/bookings | ADMIN, SUPER_ADMIN | Read-only list of all bookings with customer, package, destination, provider, payment (`payment_status` is `PAID`, `REFUNDED` or `UNPAID`) and review rating. Filters: `status` (`PENDING`, `CONFIRMED`, `CANCELLED`, `COMPLETED`), `payment_status`, `search` (customer name/email, package, provider), `from` and `to` (`YYYY-MM-DD`, booking date). 400 for invalid filters. Supports pagination |
-| GET | /api/admin/bookings/:id | ADMIN, SUPER_ADMIN | One booking in the same shape; 400 bad id, 404 missing. Admins can monitor bookings but not change them |
-| GET | /api/admin/reports?from=&to= | ADMIN, SUPER_ADMIN | Platform report for an optional `YYYY-MM-DD` range (400 if invalid). Figures use the booking date. Returns `summary` (booking counts by status, guests, `paid_total`, `refunded_total`, `net_total`, `gross_total`, `new_customers`, `new_providers`), `catalogue` (package counts by status, not date filtered), `monthly`, `top_packages` and `top_providers` (top 5 by revenue), `destinations` and `categories` (bookings and revenue) |
+| GET | /api/admin/packages?status=&search= | ADMIN (MODERATE_PACKAGES), SUPER_ADMIN | Packages of all providers with provider, destination and category (PENDING first). `status` is `PENDING`, `APPROVED`, `REJECTED` or `ARCHIVED` (400 otherwise). Supports pagination |
+| GET | /api/admin/packages/:id | ADMIN (MODERATE_PACKAGES), SUPER_ADMIN | One package with itinerary, inclusions and `rejection_reason`; 400 bad id, 404 missing |
+| PATCH | /api/admin/packages/:id/status | ADMIN (MODERATE_PACKAGES), SUPER_ADMIN | Body: `status` (`APPROVED` or `REJECTED`), optional `rejection_reason` (max 255, only stored when rejecting). Approving clears the reason. 409 for ARCHIVED packages. Logged as `PACKAGE_APPROVED/REJECTED` |
+| GET | /api/admin/bookings | ADMIN (VIEW_BOOKINGS), SUPER_ADMIN | Read-only list of all bookings with customer, package, destination, provider, payment (`payment_status` is `PAID`, `REFUNDED` or `UNPAID`) and review rating. Filters: `status` (`PENDING`, `CONFIRMED`, `CANCELLED`, `COMPLETED`), `payment_status`, `search` (customer name/email, package, provider), `from` and `to` (`YYYY-MM-DD`, booking date). 400 for invalid filters. Supports pagination |
+| GET | /api/admin/bookings/:id | ADMIN (VIEW_BOOKINGS), SUPER_ADMIN | One booking in the same shape; 400 bad id, 404 missing. Admins can monitor bookings but not change them |
+| GET | /api/admin/reports?from=&to= | ADMIN (VIEW_REPORTS), SUPER_ADMIN | Platform report for an optional `YYYY-MM-DD` range (400 if invalid). Figures use the booking date. Returns `summary` (booking counts by status, guests, `paid_total`, `refunded_total`, `net_total`, `gross_total`, `new_customers`, `new_providers`), `catalogue` (package counts by status, not date filtered), `monthly`, `top_packages` and `top_providers` (top 5 by revenue), `destinations` and `categories` (bookings and revenue) |
 | GET | /api/superadmin/admins?search=&status= | SUPER_ADMIN | List ADMIN accounts (`status` = `ACTIVE` or `DISABLED`) with `permission_count`. Supports pagination |
 | POST | /api/superadmin/admins | SUPER_ADMIN | Create an admin. Body: `full_name`, `email`, optional `phone`, `password` (8-72 chars). 409 duplicate email. Never returns the hash |
 | GET | /api/superadmin/admins/:id | SUPER_ADMIN | One admin; 404 for any id that is not an ADMIN account (customers, providers and super admins are not reachable here) |
 | PUT | /api/superadmin/admins/:id | SUPER_ADMIN | Update `full_name`, `email`, `phone`; a `password` in the body resets it, omit it to keep the current one |
 | PATCH | /api/superadmin/admins/:id/status | SUPER_ADMIN | Body: `is_active` (boolean). A disabled admin can no longer log in and existing tokens stop working |
 | DELETE | /api/superadmin/admins/:id | SUPER_ADMIN | Delete an admin. 409 if the admin already has audit-log history (disable instead) |
+| GET | /api/superadmin/permissions | SUPER_ADMIN | All grantable permissions: `[{ name, description }]` |
+| GET | /api/superadmin/admins/:id/permissions | SUPER_ADMIN | `{ admin_id, permissions: [...] }`; 404 if the id is not an ADMIN |
+| PUT | /api/superadmin/admins/:id/permissions | SUPER_ADMIN | Replace the admin's full permission set. Body: `permissions` (array of names, 400 for unknown names or a non-array). Effective immediately. Logged as `ADMIN_PERMISSIONS_UPDATED` |
 | GET | /api/admin/dashboard | ADMIN, SUPER_ADMIN | Platform-wide customer, provider, package, destination, category, booking and payment summary; includes today's registrations and bookings |
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
 | GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
@@ -70,7 +73,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/packages/:id/departures | Public | Available departures for an approved package starting from today with live calculated remaining seats (`seats_available`) |
 | POST | /api/auth/register | Public | Create an account. Body: `full_name`, `email`, `password` (8-72 chars), optional `phone`, optional `role` (`CUSTOMER` default, or `PROVIDER`; providers start with `provider_status` PENDING). Returns the user (201). 400 invalid input, 409 email already registered. Admin accounts cannot be self-registered |
 | POST | /api/auth/login | Public | Body: `email`, `password`. Returns `{ token, user }`. 400 missing fields, 401 wrong email or password (same message for both), 403 account disabled |
-| GET | /api/auth/me | Bearer token | Return currently authenticated user (`id, full_name, email, phone, role, provider_status`). 401 unauthenticated, 403 account disabled |
+| GET | /api/auth/me | Bearer token | Return currently authenticated user (`id, full_name, email, phone, role, provider_status`; ADMIN and SUPER_ADMIN also get `permissions`, an array of their effective permission names). 401 unauthenticated, 403 account disabled |
 | GET | /api/users/profile | Bearer token | Return user profile with attached address (`id, full_name, email, phone, role, provider_status, address`). 401 unauthenticated |
 | PUT | /api/users/profile | Bearer token | Update user profile name, phone, and upsert primary address. Body: `full_name`, optional `phone`, optional `address` (`street, city, state, postal_code, country`). 400 invalid input |
 | POST | /api/bookings | CUSTOMER | Create booking reserving seats. Body: `departure_id`, `num_guests`. Locks departure row, verifies seat availability against PENDING/CONFIRMED reservations, computes total_price snapshot, returns booking in PENDING status (201) |
@@ -92,7 +95,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | payments | **Simulated** (no real gateway): `booking_id` FK (unique, one per booking), `amount`, `method` CARD / UPI / NET_BANKING, `status` PAID / REFUNDED, `paid_at` |
 | reviews | `booking_id` FK (unique, one review per booking), `rating` 1-5 (CHECK), `comment` |
 | audit_logs | Admin / super admin action trail: `user_id` FK (actor), `action`, `entity`, `entity_id`, `details`, `created_at`. *Note on specification alignment:* corresponds to `system_logs` in the project spec; standardizes column names with our entity foreign key pattern. |
-| admin_permissions | Super admin granular permission assignments for admins: `admin_id` FK to users, `permission`, `created_at` |
+| admin_permissions | Permissions granted to ADMIN accounts by a super admin: `admin_id` FK to users, `permission` (one of the names in the Admin permissions section), `created_at`; unique per (admin, permission) |
 | settings | Extensible key-value store for application/system settings: `setting_key` PK, `setting_value`, `description`, `updated_at` |
 | addresses | User address records: `user_id` FK to users (unique, enforced by migration 010), `street`, `city`, `state`, `postal_code`, `country`, `created_at` |
 
@@ -109,7 +112,21 @@ Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`
 - **Reviews:** only for the customer's own COMPLETED booking (or confirmed where trip end date has passed), once per booking. Verified independently inside `createReview()`.
 - **Address management:** each user has one address in `addresses` with a UNIQUE constraint on `user_id`, upserted via `INSERT ... ON DUPLICATE KEY UPDATE`.
 - **Provider approval:** new providers start PENDING; an admin approves/rejects. New packages start PENDING; an admin approves/rejects them.
-- **Audit logging:** admin and super admin actions write a row to `audit_logs` through `logAction(userId, action, entity, entityId, details)` in `backend/services/auditService.js`. Logging is best effort (a failure is printed to the server console and never breaks the action). Actions logged so far: `CUSTOMER_BLOCKED/UNBLOCKED`, `PROVIDER_APPROVED/REJECTED/BLOCKED/UNBLOCKED`, `DESTINATION_CREATED/UPDATED/DELETED`, `CATEGORY_CREATED/UPDATED/DELETED`, `PACKAGE_APPROVED/REJECTED`, `ADMIN_CREATED/UPDATED/ENABLED/DISABLED/DELETED`. New admin features must log their changes the same way.
+- **Audit logging:** admin and super admin actions write a row to `audit_logs` through `logAction(userId, action, entity, entityId, details)` in `backend/services/auditService.js`. Logging is best effort (a failure is printed to the server console and never breaks the action). Actions logged so far: `CUSTOMER_BLOCKED/UNBLOCKED`, `PROVIDER_APPROVED/REJECTED/BLOCKED/UNBLOCKED`, `DESTINATION_CREATED/UPDATED/DELETED`, `CATEGORY_CREATED/UPDATED/DELETED`, `PACKAGE_APPROVED/REJECTED`, `ADMIN_CREATED/UPDATED/ENABLED/DISABLED/DELETED`, `ADMIN_PERMISSIONS_UPDATED`. New admin features must log their changes the same way.
+
+### Admin permissions
+ADMIN accounts only reach the admin endpoints they have been granted; SUPER_ADMIN always passes. Enforced by `requirePermission()` in `backend/middleware/auth.js` (403 `You do not have permission to perform this action`); changes take effect on the next request. The admin dashboard needs no permission. Names live in `backend/utils/permissions.js`:
+
+| Permission | Unlocks |
+|---|---|
+| MANAGE_CUSTOMERS | `/api/admin/customers*` |
+| MANAGE_PROVIDERS | `/api/admin/providers*` |
+| MODERATE_PACKAGES | `/api/admin/packages*` |
+| MANAGE_CATALOGUE | `/api/admin/destinations*` and `/api/admin/categories*` |
+| VIEW_BOOKINGS | `/api/admin/bookings*` |
+| VIEW_REPORTS | `/api/admin/reports` |
+
+A new admin created without `permissions` starts with none (least privilege); pass `permissions` when creating or use the permissions endpoint. Migration 012 and `seed.sql` grant every permission to existing/demo admins.
 
 ### Roles and permissions (enforced by backend middleware)
 | Action | Customer | Provider | Admin | Super Admin |
@@ -121,7 +138,8 @@ Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`
 | View bookings of own packages | | yes | | |
 | Approve/reject providers and packages | | | yes | yes |
 | Enable/disable customer and provider accounts | | | yes | yes |
-| Manage admin accounts and view audit logs | | | | yes |
+| Manage admin accounts, permissions, settings and view audit logs | | | | yes |
+| Admin endpoints (customers, providers, packages, catalogue, bookings, reports) | | | only with the matching permission | yes |
 
 Schema changes: add `database/migrations/NNN_description.sql` and update `schema.sql`.
 
@@ -170,6 +188,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Step 5.2 Admin permissions: `requirePermission()` middleware now guards every admin endpoint (except the dashboard); `GET /api/superadmin/permissions`, `GET/PUT /api/superadmin/admins/:id/permissions`; optional `permissions` when creating an admin; `/api/auth/me` returns `permissions` for admins; migration 012 grants existing admins everything; `seed.sql` grants the demo admin everything.
 - 2026-11-06: Step 5.1 Super admin admin-account management: `/api/superadmin/admins` (list, create, get, update, enable/disable, delete), all logged. `tests/api.test.js` now removes the audit entries it creates.
 - 2026-11-06: Admin reports: `GET /api/admin/reports`. Pagination now works on the customers, providers, destinations and categories admin lists. Fixes: net revenue no longer subtracts refunds twice (provider finance, provider reports, admin dashboard `net_collected`); admin category search now works.
 - 2026-11-06: Admin booking monitoring: `GET /api/admin/bookings` (filters, pagination) and `GET /api/admin/bookings/:id`; `backend/utils/dates.js` date parameter validation; booking tests added to `tests/api.test.js`.

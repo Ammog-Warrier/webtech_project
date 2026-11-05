@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
+const { getAdminPermissions, setAdminPermissions } = require('./permissionService');
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -42,10 +43,11 @@ async function getAdmin(adminId) {
     `${ADMIN_SELECT} WHERE u.id = ? AND r.name = 'ADMIN' LIMIT 1`,
     [adminId]
   );
-  return rows.length ? clean(rows[0]) : null;
+  if (!rows.length) return null;
+  return { ...clean(rows[0]), permissions: await getAdminPermissions(adminId) };
 }
 
-async function createAdmin({ fullName, email, phone, password }) {
+async function createAdmin({ fullName, email, phone, password, permissions = [] }) {
   const passwordHash = await bcrypt.hash(password, 10);
   try {
     const [result] = await pool.execute(
@@ -53,6 +55,7 @@ async function createAdmin({ fullName, email, phone, password }) {
        SELECT id, ?, ?, ?, ?, 'NOT_APPLICABLE' FROM roles WHERE name = 'ADMIN'`,
       [fullName, email, phone, passwordHash]
     );
+    if (permissions.length) await setAdminPermissions(result.insertId, permissions);
     return getAdmin(result.insertId);
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') throw httpError(409, 'An account with this email already exists');

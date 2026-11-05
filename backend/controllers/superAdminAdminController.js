@@ -2,6 +2,7 @@ const { ok, fail } = require('../utils/response');
 const { parseJsonBody } = require('../utils/body');
 const { parsePaging, applyPaging } = require('../utils/pagination');
 const { logAction } = require('../services/auditService');
+const { PERMISSION_NAMES } = require('../utils/permissions');
 const {
   listAdmins,
   getAdmin,
@@ -34,7 +35,14 @@ function validateAdminBody(body, { passwordRequired }) {
   } else if (!isText(password) || password.length < 8 || Buffer.byteLength(password) > 72) {
     return { error: 'Password must be 8 to 72 characters' };
   }
-  return { value: { fullName, email, phone, password } };
+  let permissions = [];
+  if (body.permissions !== undefined) {
+    if (!Array.isArray(body.permissions) || body.permissions.some((name) => !PERMISSION_NAMES.includes(name))) {
+      return { error: `permissions must be an array of: ${PERMISSION_NAMES.join(', ')}` };
+    }
+    permissions = [...new Set(body.permissions)];
+  }
+  return { value: { fullName, email, phone, password, permissions } };
 }
 
 function handleError(res, err, fallback) {
@@ -72,6 +80,9 @@ async function createAdminAccount(req, res) {
     if (checked.error) return fail(res, 400, checked.error);
     const admin = await createAdmin(checked.value);
     await logAction(req.user.id, 'ADMIN_CREATED', 'users', admin.id, admin.email);
+    if (checked.value.permissions.length) {
+      await logAction(req.user.id, 'ADMIN_PERMISSIONS_UPDATED', 'users', admin.id, checked.value.permissions.join(', '));
+    }
     return ok(res, admin, 201);
   } catch (err) {
     return handleError(res, err, 'Unable to create admin');
