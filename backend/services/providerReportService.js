@@ -184,7 +184,7 @@ async function getProviderReports(providerId, from, to) {
       guests: Number(summary.guests || 0),
       paid_total: paid,
       refunded_total: refunded,
-      net_total: paid - refunded,
+      net_total: paid,
       payment_count: Number(revenueRows[0].payment_count || 0),
     },
     monthly: [...monthMap.values()].sort((a, b) => a.month.localeCompare(b.month)),
@@ -199,7 +199,7 @@ async function getProviderReports(providerId, from, to) {
         cancelled: Number(row.cancelled || 0),
         paid: revenue.paid,
         refunded: revenue.refunded,
-        net: revenue.paid - revenue.refunded,
+        net: revenue.paid,
       };
     }),
     departures: departureRows.map((row) => {

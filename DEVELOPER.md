@@ -56,6 +56,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | PATCH | /api/admin/packages/:id/status | ADMIN, SUPER_ADMIN | Body: `status` (`APPROVED` or `REJECTED`), optional `rejection_reason` (max 255, only stored when rejecting). Approving clears the reason. 409 for ARCHIVED packages. Logged as `PACKAGE_APPROVED/REJECTED` |
 | GET | /api/admin/bookings | ADMIN, SUPER_ADMIN | Read-only list of all bookings with customer, package, destination, provider, payment (`payment_status` is `PAID`, `REFUNDED` or `UNPAID`) and review rating. Filters: `status` (`PENDING`, `CONFIRMED`, `CANCELLED`, `COMPLETED`), `payment_status`, `search` (customer name/email, package, provider), `from` and `to` (`YYYY-MM-DD`, booking date). 400 for invalid filters. Supports pagination |
 | GET | /api/admin/bookings/:id | ADMIN, SUPER_ADMIN | One booking in the same shape; 400 bad id, 404 missing. Admins can monitor bookings but not change them |
+| GET | /api/admin/reports?from=&to= | ADMIN, SUPER_ADMIN | Platform report for an optional `YYYY-MM-DD` range (400 if invalid). Figures use the booking date. Returns `summary` (booking counts by status, guests, `paid_total`, `refunded_total`, `net_total`, `gross_total`, `new_customers`, `new_providers`), `catalogue` (package counts by status, not date filtered), `monthly`, `top_packages` and `top_providers` (top 5 by revenue), `destinations` and `categories` (bookings and revenue) |
 | GET | /api/admin/dashboard | ADMIN, SUPER_ADMIN | Platform-wide customer, provider, package, destination, category, booking and payment summary; includes today's registrations and bookings |
 | GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
 | GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
@@ -93,6 +94,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 Login returns a signed token (HMAC-SHA256 using `AUTH_SECRET`, built-in `crypto`; payload `sub` = user id, `role`, `exp` = 8 hours). The client sends it as `Authorization: Bearer <token>`. `backend/utils/token.js` has `createToken` and `verifyToken`. `backend/middleware/auth.js` provides `requireAuth(handler)` and `requireRole(allowedRoles, handler)`.
 
 ### Business rules (enforced in services, not just the UI)
+- **Revenue figures:** a payment row is either `PAID` or `REFUNDED` (cancelling a confirmed booking flips it). So `paid_total` is money still held, `refunded_total` is money returned, and `net_total` equals `paid_total`; `gross_total` (admin report) is paid plus refunded.
 - **Seats left** for a departure = `seats_total` minus the `num_guests` of its PENDING and CONFIRMED bookings. A booking must not exceed it.
 - **Concurrency & Pessimistic Locking:** Booking creation locks the `package_departures` row using `SELECT ... FOR UPDATE` before re-evaluating seat availability and writing the booking row inside the same transaction.
 - **Booking lifecycle:** PENDING (created) -> CONFIRMED (payment made) -> COMPLETED (after departure date + duration_days). CANCELLED is allowed from PENDING or CONFIRMED (a CONFIRMED cancel marks the payment REFUNDED in a single transaction).
@@ -154,7 +156,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 **API:** use `ok()` / `fail()` from `backend/utils/response.js`. Status codes: 200/201 success, 400 validation, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict, 500 server error. Routes under `/api`, plural nouns.
 
-**Pagination:** list endpoints that support it return a plain array by default. Add `?page=<n>&limit=<n>` (limit max 100, default 10) to get `{ "items": [...], "page", "limit", "total", "total_pages" }` instead; invalid values return 400. Helper: `backend/utils/pagination.js`.
+**Pagination:** list endpoints that support it return a plain array by default. Supported by all admin list endpoints (customers, providers, destinations, categories, packages, bookings). Add `?page=<n>&limit=<n>` (limit max 100, default 10) to get `{ "items": [...], "page", "limit", "total", "total_pages" }` instead; invalid values return 400. Helper: `backend/utils/pagination.js`.
 
 **Security:** no credentials in code, `.env` stays untracked, hash passwords with bcryptjs and never return hashes, validate input server-side, enforce roles in the backend, use `textContent` (not `innerHTML`) for user content, app connects with the limited DB user (never root).
 
@@ -162,6 +164,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Admin reports: `GET /api/admin/reports`. Pagination now works on the customers, providers, destinations and categories admin lists. Fixes: net revenue no longer subtracts refunds twice (provider finance, provider reports, admin dashboard `net_collected`); admin category search now works.
 - 2026-11-06: Admin booking monitoring: `GET /api/admin/bookings` (filters, pagination) and `GET /api/admin/bookings/:id`; `backend/utils/dates.js` date parameter validation; booking tests added to `tests/api.test.js`.
 - 2026-11-06: Admin package moderation: `GET /api/admin/packages`, `GET /api/admin/packages/:id`, `PATCH /api/admin/packages/:id/status`; migration 011 adds `packages.rejection_reason` (shown to the provider); optional pagination helper; `tests/api.test.js` and `npm run test:api`.
 - 2026-11-06: Step 6 audit logging: new `auditService.logAction()`; customer, provider, destination and category admin actions now write to `audit_logs`.

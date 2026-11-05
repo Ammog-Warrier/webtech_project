@@ -190,6 +190,56 @@ section('Admin booking monitoring', async (t) => {
   check('admin cannot modify bookings (no write route)', write.status === 404);
 });
 
+section('Admin reports, net revenue and pagination', async (t) => {
+  check('reports: no token -> 401', (await api('GET', '/api/admin/reports')).status === 401);
+  check('reports: customer -> 403', (await api('GET', '/api/admin/reports', { token: t.customer })).status === 403);
+  check('reports: provider -> 403', (await api('GET', '/api/admin/reports', { token: t.provider })).status === 403);
+  check('reports: bad date -> 400', (await api('GET', '/api/admin/reports?from=nope', { token: t.admin })).status === 400);
+  check('reports: from after to -> 400', (await api('GET', '/api/admin/reports?from=2026-02-01&to=2026-01-01', { token: t.admin })).status === 400);
+
+  const future = await api('GET', '/api/admin/reports?from=2999-01-01', { token: t.admin });
+  check('reports: empty range has zero totals and empty lists', future.status === 200 && future.data.summary.total_bookings === 0 && future.data.summary.paid_total === 0 && future.data.monthly.length === 0 && future.data.top_packages.length === 0, future.body);
+
+  const before = (await api('GET', '/api/admin/reports', { token: t.superadmin })).data;
+  const paid = await makeBooking(t, { pay: true, guests: 2 });
+  const cancelled = await makeBooking(t, { pay: true, guests: 1, packageId: 2 });
+  await api('POST', `/api/bookings/${cancelled.id}/cancel`, { token: t.customer });
+  await makeBooking(t, { pay: false });
+  const paidPrice = (await api('GET', `/api/admin/bookings/${paid.id}`, { token: t.admin })).data.total_price;
+  const refundPrice = (await api('GET', `/api/admin/bookings/${cancelled.id}`, { token: t.admin })).data.total_price;
+
+  const after = (await api('GET', '/api/admin/reports', { token: t.admin })).data;
+  const diff = (key) => Math.round((after.summary[key] - before.summary[key]) * 100) / 100;
+  check('report counts the 3 new bookings', diff('total_bookings') === 3, diff('total_bookings'));
+  check('report counts 1 cancelled and 1 pending', diff('cancelled_bookings') === 1 && diff('pending_bookings') === 1);
+  check('report paid_total grows by the paid booking', diff('paid_total') === Number(paidPrice), diff('paid_total'));
+  check('report refunded_total grows by the refund', diff('refunded_total') === Number(refundPrice), diff('refunded_total'));
+  check('net_total equals paid_total (refunds are not subtracted twice)', after.summary.net_total === after.summary.paid_total);
+  check('gross_total = paid + refunded', Math.abs(after.summary.gross_total - (after.summary.paid_total + after.summary.refunded_total)) < 0.001);
+  check('report has all sections', ['monthly', 'top_packages', 'top_providers', 'destinations', 'categories'].every((k) => Array.isArray(after[k])) && after.catalogue.APPROVED >= 1);
+  check('top package/provider rows have names', after.top_packages[0].package_title && after.top_providers[0].provider_name);
+
+  const dash = await api('GET', '/api/admin/dashboard', { token: t.admin });
+  check('dashboard net_collected equals paid_revenue', dash.data.net_collected === dash.data.paid_revenue, dash.data);
+  const fin = await api('GET', '/api/provider/finance', { token: t.provider });
+  check('provider finance net_total equals paid_total', fin.status === 200 && fin.data.summary.refunded_total > 0 && fin.data.summary.net_total === fin.data.summary.paid_total, fin.body && fin.data.summary);
+  const prep = await api('GET', '/api/provider/reports', { token: t.provider });
+  check('provider report net_total equals paid_total', prep.status === 200 && prep.data.summary.net_total === prep.data.summary.paid_total);
+
+  for (const path of ['customers', 'providers', 'destinations', 'categories']) {
+    const url = `/api/admin/${path}`;
+    const plain = await api('GET', url, { token: t.admin });
+    check(`${path}: default response is still an array`, plain.status === 200 && Array.isArray(plain.data));
+    const paged = await api('GET', `${url}?page=1&limit=1`, { token: t.admin });
+    check(`${path}: ?page&limit returns pagination envelope`, paged.status === 200 && paged.data.items.length === 1 && paged.data.total === plain.data.length && paged.data.total_pages === plain.data.length, paged.body);
+    check(`${path}: bad page -> 400`, (await api('GET', `${url}?page=abc`, { token: t.admin })).status === 400);
+  }
+  const beyond = await api('GET', '/api/admin/categories?page=99&limit=5', { token: t.admin });
+  check('page beyond the end -> empty items', beyond.status === 200 && beyond.data.items.length === 0);
+  const cat = await api('GET', '/api/admin/categories?search=Adventure', { token: t.admin });
+  check('category search works', cat.status === 200 && cat.data.length === 1 && cat.data[0].name === 'Adventure', cat.body);
+});
+
 // SECTIONS-END (new sections are added above this line)
 
 async function main() {

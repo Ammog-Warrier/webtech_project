@@ -66,6 +66,9 @@ const {
   getBookingDetails: getAdminBookingDetails,
 } = require('../controllers/adminBookingController');
 
+// Admin reports
+const { getReport: getAdminReport } = require('../controllers/adminReportController');
+
 const {
   requireAuth,
   requireRole,
@@ -235,6 +238,12 @@ const routes = {
   'GET /api/admin/bookings/:id': requireRole(
     ['ADMIN', 'SUPER_ADMIN'],
     getAdminBookingDetails
+  ),
+
+  // Admin reports
+  'GET /api/admin/reports': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    getAdminReport
   ),
 
   // Provider dashboard

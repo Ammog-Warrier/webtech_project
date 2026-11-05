@@ -64,7 +64,7 @@ async function getProviderFinance(providerId) {
     summary: {
       paid_total: paid,
       refunded_total: refunded,
-      net_total: paid - refunded,
+      net_total: paid,
       paid_transactions: Number(summary.paid_transactions),
       refunded_transactions: Number(summary.refunded_transactions),
       unpaid_bookings: Number(unpaidRows[0].unpaid_bookings),
@@ -74,7 +74,7 @@ async function getProviderFinance(providerId) {
       ...row,
       paid_total: Number(row.paid_total),
       refunded_total: Number(row.refunded_total),
-      net_total: Number(row.paid_total) - Number(row.refunded_total),
+      net_total: Number(row.paid_total),
       booking_count: Number(row.booking_count),
     })),
     recent_payments: recentRows.map((row) => ({ ...row, amount: Number(row.amount) })),

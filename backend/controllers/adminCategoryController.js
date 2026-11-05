@@ -7,6 +7,7 @@ const {
 } = require('../services/adminCategoryService');
 const { logAction } = require('../services/auditService');
 const { parseJsonBody } = require('../utils/body');
+const { parsePaging, applyPaging } = require('../utils/pagination');
 const { ok, fail } = require('../utils/response');
 
 function validId(value) {
@@ -30,12 +31,13 @@ function validateCategory(body) {
 
 async function getAdminCategories(req, res) {
   try {
-    const search = typeof req.query?.search === 'string'
-      ? req.query.search.trim().slice(0, 100)
-      : '';
+    const url = new URL(req.url, 'http://localhost');
+    const paging = parsePaging(url.searchParams);
+    const search = (url.searchParams.get('search') || '').trim().slice(0, 100);
     const rows = await getCategories(search);
-    return ok(res, rows);
+    return ok(res, applyPaging(rows, paging));
   } catch (error) {
+    if (error.status === 400) return fail(res, 400, error.message);
     console.error('Admin categories list error:', error);
     return fail(res, 500, 'Unable to load categories.');
   }

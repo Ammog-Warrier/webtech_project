@@ -1,6 +1,7 @@
 const { logAction } = require('../services/auditService');
 const { ok, fail } = require('../utils/response');
 const { parseJsonBody } = require('../utils/body');
+const { parsePaging, applyPaging } = require('../utils/pagination');
 const {
   listProviders,
   getProvider,
@@ -14,11 +15,12 @@ function validId(value) {
 async function getProviders(req, res) {
   try {
     const url = new URL(req.url, 'http://localhost');
+    const paging = parsePaging(url.searchParams);
     const providers = await listProviders({
       search: url.searchParams.get('search') || '',
       status: url.searchParams.get('status') || '',
     });
-    return ok(res, providers);
+    return ok(res, applyPaging(providers, paging));
   } catch (err) {
     return fail(res, err.status || 500, err.message || 'Unable to load providers');
   }
