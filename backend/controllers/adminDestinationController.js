@@ -45,7 +45,7 @@ async function getDestinations(req, res) {
     const destinations = await listAdminDestinations(url.searchParams.get('search') || '');
     return ok(res, applyPaging(destinations, paging));
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to load destinations');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to load destinations');
   }
 }
 
@@ -58,7 +58,7 @@ async function getDestinationDetails(req, res) {
     if (!destination) return fail(res, 404, 'Destination not found');
     return ok(res, destination);
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to load destination');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to load destination');
   }
 }
 
@@ -71,7 +71,7 @@ async function createDestination(req, res) {
     await logAction(req.user.id, 'DESTINATION_CREATED', 'destinations', destination.id, destination.name);
     return ok(res, destination, 201);
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to create destination');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to create destination');
   }
 }
 
@@ -90,7 +90,7 @@ async function updateDestination(req, res) {
     await logAction(req.user.id, 'DESTINATION_UPDATED', 'destinations', destination.id, destination.name);
     return ok(res, destination);
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to update destination');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to update destination');
   }
 }
 
@@ -103,7 +103,7 @@ async function deleteDestination(req, res) {
     await logAction(req.user.id, 'DESTINATION_DELETED', 'destinations', Number(req.params.id), null);
     return ok(res, { message: 'Destination deleted successfully' });
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to delete destination');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to delete destination');
   }
 }
 

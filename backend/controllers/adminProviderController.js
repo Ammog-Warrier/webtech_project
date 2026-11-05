@@ -22,7 +22,7 @@ async function getProviders(req, res) {
     });
     return ok(res, applyPaging(providers, paging));
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to load providers');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to load providers');
   }
 }
 
@@ -33,7 +33,7 @@ async function getProviderDetails(req, res) {
     if (!provider) return fail(res, 404, 'Provider not found');
     return ok(res, provider);
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to load provider');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to load provider');
   }
 }
 
@@ -60,7 +60,7 @@ async function updateProviderStatus(req, res) {
     await logAction(req.user.id, action, 'users', provider.id, provider.email);
     return ok(res, provider);
   } catch (err) {
-    return fail(res, err.status || 500, err.message || 'Unable to update provider');
+    return fail(res, err.status || 500, err.status ? err.message : 'Unable to update provider');
   }
 }
 

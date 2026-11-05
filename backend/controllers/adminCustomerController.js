@@ -22,7 +22,7 @@ async function getCustomers(req, res) {
     });
     ok(res, applyPaging(customers, paging));
   } catch (err) {
-    fail(res, err.status || 500, err.message || 'Unable to load customers');
+    fail(res, err.status || 500, err.status ? err.message : 'Unable to load customers');
   }
 }
 
@@ -33,7 +33,7 @@ async function getCustomerDetails(req, res) {
     if (!customer) return fail(res, 404, 'Customer not found');
     ok(res, customer);
   } catch (err) {
-    fail(res, err.status || 500, err.message || 'Unable to load customer');
+    fail(res, err.status || 500, err.status ? err.message : 'Unable to load customer');
   }
 }
 
@@ -48,7 +48,7 @@ async function updateCustomerStatus(req, res) {
     await logAction(req.user.id, body.is_active ? 'CUSTOMER_UNBLOCKED' : 'CUSTOMER_BLOCKED', 'users', customer.id, customer.email);
     ok(res, customer);
   } catch (err) {
-    fail(res, err.status || 500, err.message || 'Unable to update customer status');
+    fail(res, err.status || 500, err.status ? err.message : 'Unable to update customer status');
   }
 }
 

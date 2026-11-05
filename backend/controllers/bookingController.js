@@ -23,7 +23,7 @@ async function createNewBooking(req, res) {
     });
     ok(res, booking, 201);
   } catch (err) {
-    fail(res, err.status || 500, err.message);
+    fail(res, err.status || 500, err.status ? err.message : 'Something went wrong. Please try again.');
   }
 }
 
@@ -32,7 +32,7 @@ async function getMyBookings(req, res) {
     const bookings = await getCustomerBookings(req.user.id);
     ok(res, bookings);
   } catch (err) {
-    fail(res, err.status || 500, err.message);
+    fail(res, err.status || 500, err.status ? err.message : 'Something went wrong. Please try again.');
   }
 }
 
@@ -49,7 +49,7 @@ async function cancelMyBooking(req, res) {
     });
     ok(res, result);
   } catch (err) {
-    fail(res, err.status || 500, err.message);
+    fail(res, err.status || 500, err.status ? err.message : 'Something went wrong. Please try again.');
   }
 }
 
@@ -73,7 +73,7 @@ async function payForBooking(req, res) {
     });
     ok(res, payment);
   } catch (err) {
-    fail(res, err.status || 500, err.message);
+    fail(res, err.status || 500, err.status ? err.message : 'Something went wrong. Please try again.');
   }
 }
 
@@ -98,7 +98,7 @@ async function reviewMyBooking(req, res) {
     });
     ok(res, review, 201);
   } catch (err) {
-    fail(res, err.status || 500, err.message);
+    fail(res, err.status || 500, err.status ? err.message : 'Something went wrong. Please try again.');
   }
 }
 

@@ -37,7 +37,7 @@ async function getAdminCategories(req, res) {
     const rows = await getCategories(search);
     return ok(res, applyPaging(rows, paging));
   } catch (error) {
-    if (error.status === 400) return fail(res, 400, error.message);
+    if (error.status) return fail(res, error.status, error.message);
     console.error('Admin categories list error:', error);
     return fail(res, 500, 'Unable to load categories.');
   }
@@ -50,6 +50,7 @@ async function getAdminCategoryDetails(req, res) {
     if (!category) return fail(res, 404, 'Category not found.');
     return ok(res, category);
   } catch (error) {
+    if (error.status) return fail(res, error.status, error.message);
     console.error('Admin category details error:', error);
     return fail(res, 500, 'Unable to load category.');
   }
@@ -64,6 +65,7 @@ async function createAdminCategory(req, res) {
     await logAction(req.user.id, 'CATEGORY_CREATED', 'categories', category.id, category.name);
     return ok(res, category, 201);
   } catch (error) {
+    if (error.status) return fail(res, error.status, error.message);
     if (error.code === 'ER_DUP_ENTRY') {
       return fail(res, 409, 'A category with this name already exists.');
     }
@@ -85,6 +87,7 @@ async function updateAdminCategory(req, res) {
     await logAction(req.user.id, 'CATEGORY_UPDATED', 'categories', Number(req.params.id), validation.value.name);
     return ok(res, await getCategoryById(Number(req.params.id)));
   } catch (error) {
+    if (error.status) return fail(res, error.status, error.message);
     if (error.code === 'ER_DUP_ENTRY') {
       return fail(res, 409, 'A category with this name already exists.');
     }
@@ -105,6 +108,7 @@ async function deleteAdminCategory(req, res) {
     await logAction(req.user.id, 'CATEGORY_DELETED', 'categories', Number(req.params.id), category.name);
     return ok(res, { message: 'Category deleted successfully.' });
   } catch (error) {
+    if (error.status) return fail(res, error.status, error.message);
     if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.code === 'ER_NO_REFERENCED_ROW_2') {
       return fail(res, 409, 'This category is linked to packages and cannot be deleted.');
     }

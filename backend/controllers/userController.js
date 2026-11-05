@@ -7,7 +7,7 @@ async function getProfile(req, res) {
     const profile = await getUserProfile(req.user.id);
     ok(res, profile);
   } catch (err) {
-    fail(res, err.status || 500, err.message);
+    fail(res, err.status || 500, err.status ? err.message : 'Something went wrong. Please try again.');
   }
 }
 
@@ -26,7 +26,7 @@ async function updateProfile(req, res) {
     });
     ok(res, updated);
   } catch (err) {
-    fail(res, err.status || 500, err.message);
+    fail(res, err.status || 500, err.status ? err.message : 'Something went wrong. Please try again.');
   }
 }
 

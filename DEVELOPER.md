@@ -13,10 +13,10 @@ Each collaborator uses their own local database and `.env` (never commit `.env`)
    GRANT ALL PRIVILEGES ON local_tourism.* TO 'tourism_user'@'localhost';
    FLUSH PRIVILEGES;
    ```
-4. Load the seed data: run `database/seed.sql` (safe to re-run; it won't duplicate rows).
+4. Load the seed data: run `database/seed.sql` (safe to re-run; it won't duplicate rows). Besides the catalogue and demo accounts it grants the demo admin every permission and adds three sample bookings (one completed and reviewed, one confirmed, one unpaid) so the admin, provider and report screens have data.
 5. `npm start` should print "Database connected"; `/api/health` should report `"database":"connected"`.
 
-**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Run each migration once, in order (e.g. `mysql -u tourism_user -p local_tourism < database/migrations/010_address_user_unique.sql`). 001, 005, 006, 007, 008, 009 and 010 are safe to re-run; 002, 003 and 004 are not (they use `ALTER TABLE`).
+**Already set up and pulled new changes?** Run the new file(s) in `database/migrations/` (as `tourism_user`, no admin needed), then `database/seed.sql` again. Run each migration once, in order (e.g. `mysql -u tourism_user -p local_tourism < database/migrations/010_address_user_unique.sql`). 001, 005, 006, 007, 008, 009 and 010-014 are safe to re-run; 002, 003 and 004 are not (they use `ALTER TABLE`).
 
 **Demo accounts (development only, created by `seed.sql`):** `customer@`, `provider@`, `admin@`, `superadmin@example.com`, all with password `Demo@1234`. Never use these outside local development.
 
@@ -46,17 +46,37 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | /api/health | Public | Server and database status |
+| POST | /api/auth/register | Public | Create an account. Body: `full_name`, `email`, `password` (8-72 chars), optional `phone`, optional `role` (`CUSTOMER` default, or `PROVIDER`; providers start with `provider_status` PENDING). Returns the user (201). 400 invalid input, 409 email already registered. Admin accounts cannot be self-registered |
+| POST | /api/auth/login | Public | Body: `email`, `password`. Returns `{ token, user }`. 400 missing fields, 401 wrong email or password (same message for both), 403 account disabled, 429 after 5 failed attempts for the same email and client within 10 minutes |
+| GET | /api/auth/me | Bearer token | Return currently authenticated user (`id, full_name, email, phone, role, provider_status`; ADMIN and SUPER_ADMIN also get `permissions`, an array of their effective permission names). 401 unauthenticated, 403 account disabled |
+| GET | /api/users/profile | Bearer token | Return user profile with attached address (`id, full_name, email, phone, role, provider_status, address`). 401 unauthenticated |
+| PUT | /api/users/profile | Bearer token | Update user profile name, phone, and upsert primary address. Body: `full_name`, optional `phone`, optional `address` (`street, city, state, postal_code, country`). 400 invalid input |
+| GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
+| GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
+| GET | /api/packages/:id | Public | One package with detail fields (`itinerary` and `inclusions` as arrays, `max_group_size`); 400 if id is not an integer, 404 if missing |
+| GET | /api/packages/:id/departures | Public | Available departures for an approved package starting from today with live calculated remaining seats (`seats_available`) |
+| GET | /api/packages/:id/calendar?month=YYYY-MM | Public | Booking calendar for an approved package: the departures starting in that month (default: current month) as `days: [{ date, end_date, departure_id, seats_total, seats_available, status }]`. `end_date` is the last day of the trip. `status` is `AVAILABLE`, `LIMITED` (25% or fewer seats left), `SOLD_OUT` or `PAST`. 400 bad month or id, 404 unknown or unapproved package |
+| GET | /api/wishlist | CUSTOMER | Saved packages, newest first (`package_id, title, price, duration_days, image_url, destination_name, category_name, added_at`). Only APPROVED packages are shown; a package that is later rejected or archived stays saved but hidden |
+| POST | /api/wishlist | CUSTOMER | Body: `package_id`. Only APPROVED packages (404 otherwise, 400 for a bad id). Idempotent: 201 when added, 200 if already saved. Returns `{ package_id, wishlisted: true }` |
+| DELETE | /api/wishlist/:packageId | CUSTOMER | Idempotent: always 200 with `{ package_id, wishlisted: false, removed }` (`removed` is false if it was not saved); 400 for a bad id |
+| GET | /api/bookings/calendar?month=YYYY-MM | CUSTOMER | The customer's own bookings whose trip starts in that month (default: current month), all statuses: `bookings: [{ booking_id, status, num_guests, date, end_date, package_id, package_title, destination_name }]` |
+| POST | /api/bookings | CUSTOMER | Create booking reserving seats. Body: `departure_id`, `num_guests`. Locks departure row, verifies seat availability against PENDING/CONFIRMED reservations, computes total_price snapshot, returns booking in PENDING status (201) |
+| GET | /api/bookings/my | CUSTOMER | Return all bookings for the logged-in customer with departure date, destination, payment status, and review status |
+| POST | /api/bookings/:id/pay | CUSTOMER | Simulate payment for a PENDING booking. Body: `method` (`CARD`, `UPI`, `NET_BANKING`). Locks booking, records payment (PAID), transitions booking to CONFIRMED atomically |
+| POST | /api/bookings/:id/cancel | CUSTOMER | Cancel customer booking. Checks cancellation cutoff against `booking_cancellation_hours_limit` setting. If CONFIRMED, marks payment as REFUNDED atomically |
+| POST | /api/bookings/:id/review | CUSTOMER | Submit review for customer's own COMPLETED booking. Body: `rating` (1-5), optional `comment`. 400 if trip not completed, 409 if already reviewed |
+| * | /api/provider/* | PROVIDER | Provider portal: dashboard, packages, departures, bookings, finance, reviews, reports (see "Provider portal endpoints", "Provider departure management" and "Provider booking management") |
 | GET | /api/admin/customers, /api/admin/customers/:id; PATCH /api/admin/customers/:id/status | ADMIN (MANAGE_CUSTOMERS), SUPER_ADMIN | Customer management (see "Admin customer management") |
 | GET | /api/admin/providers, /api/admin/providers/:id; PATCH /api/admin/providers/:id/status | ADMIN (MANAGE_PROVIDERS), SUPER_ADMIN | Provider management (see "Admin provider management") |
 | GET/POST/PUT/DELETE | /api/admin/destinations[/:id] | ADMIN (MANAGE_CATALOGUE), SUPER_ADMIN | Destination management (see section below) |
 | GET/POST/PUT/DELETE | /api/admin/categories[/:id] | ADMIN (MANAGE_CATALOGUE), SUPER_ADMIN | Category management (see section below) |
-| GET | /api/provider/* | PROVIDER | Provider portal endpoints (see "Provider portal endpoints") |
 | GET | /api/admin/packages?status=&search= | ADMIN (MODERATE_PACKAGES), SUPER_ADMIN | Packages of all providers with provider, destination and category (PENDING first). `status` is `PENDING`, `APPROVED`, `REJECTED` or `ARCHIVED` (400 otherwise). Supports pagination |
 | GET | /api/admin/packages/:id | ADMIN (MODERATE_PACKAGES), SUPER_ADMIN | One package with itinerary, inclusions and `rejection_reason`; 400 bad id, 404 missing |
 | PATCH | /api/admin/packages/:id/status | ADMIN (MODERATE_PACKAGES), SUPER_ADMIN | Body: `status` (`APPROVED` or `REJECTED`), optional `rejection_reason` (max 255, only stored when rejecting). Approving clears the reason. 409 for ARCHIVED packages. Logged as `PACKAGE_APPROVED/REJECTED` |
 | GET | /api/admin/bookings | ADMIN (VIEW_BOOKINGS), SUPER_ADMIN | Read-only list of all bookings with customer, package, destination, provider, payment (`payment_status` is `PAID`, `REFUNDED` or `UNPAID`) and review rating. Filters: `status` (`PENDING`, `CONFIRMED`, `CANCELLED`, `COMPLETED`), `payment_status`, `search` (customer name/email, package, provider), `from` and `to` (`YYYY-MM-DD`, booking date). 400 for invalid filters. Supports pagination |
 | GET | /api/admin/bookings/:id | ADMIN (VIEW_BOOKINGS), SUPER_ADMIN | One booking in the same shape; 400 bad id, 404 missing. Admins can monitor bookings but not change them |
 | GET | /api/admin/reports?from=&to= | ADMIN (VIEW_REPORTS), SUPER_ADMIN | Platform report for an optional `YYYY-MM-DD` range (400 if invalid). Figures use the booking date. Returns `summary` (booking counts by status, guests, `paid_total`, `refunded_total`, `net_total`, `gross_total`, `new_customers`, `new_providers`), `catalogue` (package counts by status, not date filtered), `monthly`, `top_packages` and `top_providers` (top 5 by revenue), `destinations` and `categories` (bookings and revenue) |
+| GET | /api/admin/dashboard | ADMIN, SUPER_ADMIN | Platform-wide customer, provider, package, destination, category, booking and payment summary; includes today's registrations and bookings |
 | GET | /api/superadmin/admins?search=&status= | SUPER_ADMIN | List ADMIN accounts (`status` = `ACTIVE` or `DISABLED`) with `permission_count`. Supports pagination |
 | POST | /api/superadmin/admins | SUPER_ADMIN | Create an admin. Body: `full_name`, `email`, optional `phone`, `password` (8-72 chars). 409 duplicate email. Never returns the hash |
 | GET | /api/superadmin/admins/:id | SUPER_ADMIN | One admin; 404 for any id that is not an ADMIN account (customers, providers and super admins are not reachable here) |
@@ -69,28 +89,10 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/superadmin/logs | SUPER_ADMIN | Audit log viewer, newest first, with actor name/email/role. Filters: `user_id`, `action` (exact, e.g. `CATEGORY_CREATED`), `entity` (e.g. `categories`), `search` (details, actor name or email), `from` / `to` (`YYYY-MM-DD`). **Always paginated** (default `limit` 20, max 100): `{ items, page, limit, total, total_pages }` |
 | GET | /api/superadmin/settings | SUPER_ADMIN | All settings: `setting_key`, `setting_value`, `description`, `updated_at` |
 | PUT | /api/superadmin/settings/:key | SUPER_ADMIN | Body: `value`. Only existing settings with a validation rule can be changed (404 otherwise, 400 for invalid values). Logged as `SETTING_UPDATED` with the old and new value |
-| GET | /api/admin/dashboard | ADMIN, SUPER_ADMIN | Platform-wide customer, provider, package, destination, category, booking and payment summary; includes today's registrations and bookings |
-| GET | /api/destinations | Public | All destinations (`id, name, description, image_url`) |
-| GET | /api/packages | Public | All APPROVED packages with `destination_name`; optional `?destination_id=<int>` (400 if not an integer) |
-| GET | /api/packages/:id | Public | One package with detail fields (`itinerary` and `inclusions` as arrays, `max_group_size`); 400 if id is not an integer, 404 if missing |
-| GET | /api/packages/:id/departures | Public | Available departures for an approved package starting from today with live calculated remaining seats (`seats_available`) |
-| GET | /api/packages/:id/calendar?month=YYYY-MM | Public | Booking calendar for an approved package: the departures starting in that month (default: current month) as `days: [{ date, end_date, departure_id, seats_total, seats_available, status }]`. `end_date` is the last day of the trip. `status` is `AVAILABLE`, `LIMITED` (25% or fewer seats left), `SOLD_OUT` or `PAST`. 400 bad month or id, 404 unknown or unapproved package |
-| POST | /api/auth/register | Public | Create an account. Body: `full_name`, `email`, `password` (8-72 chars), optional `phone`, optional `role` (`CUSTOMER` default, or `PROVIDER`; providers start with `provider_status` PENDING). Returns the user (201). 400 invalid input, 409 email already registered. Admin accounts cannot be self-registered |
-| POST | /api/auth/login | Public | Body: `email`, `password`. Returns `{ token, user }`. 400 missing fields, 401 wrong email or password (same message for both), 403 account disabled |
-| GET | /api/auth/me | Bearer token | Return currently authenticated user (`id, full_name, email, phone, role, provider_status`; ADMIN and SUPER_ADMIN also get `permissions`, an array of their effective permission names). 401 unauthenticated, 403 account disabled |
-| GET | /api/users/profile | Bearer token | Return user profile with attached address (`id, full_name, email, phone, role, provider_status, address`). 401 unauthenticated |
-| PUT | /api/users/profile | Bearer token | Update user profile name, phone, and upsert primary address. Body: `full_name`, optional `phone`, optional `address` (`street, city, state, postal_code, country`). 400 invalid input |
-| GET | /api/wishlist | CUSTOMER | Saved packages, newest first (`package_id, title, price, duration_days, image_url, destination_name, category_name, added_at`). Only APPROVED packages are shown; a package that is later rejected or archived stays saved but hidden |
-| POST | /api/wishlist | CUSTOMER | Body: `package_id`. Only APPROVED packages (404 otherwise, 400 for a bad id). Idempotent: 201 when added, 200 if already saved. Returns `{ package_id, wishlisted: true }` |
-| DELETE | /api/wishlist/:packageId | CUSTOMER | Idempotent: always 200 with `{ package_id, wishlisted: false, removed }` (`removed` is false if it was not saved); 400 for a bad id |
-| GET | /api/bookings/calendar?month=YYYY-MM | CUSTOMER | The customer's own bookings whose trip starts in that month (default: current month), all statuses: `bookings: [{ booking_id, status, num_guests, date, end_date, package_id, package_title, destination_name }]` |
-| POST | /api/bookings | CUSTOMER | Create booking reserving seats. Body: `departure_id`, `num_guests`. Locks departure row, verifies seat availability against PENDING/CONFIRMED reservations, computes total_price snapshot, returns booking in PENDING status (201) |
-| GET | /api/bookings/my | CUSTOMER | Return all bookings for the logged-in customer with departure date, destination, payment status, and review status |
-| POST | /api/bookings/:id/pay | CUSTOMER | Simulate payment for a PENDING booking. Body: `method` (`CARD`, `UPI`, `NET_BANKING`). Locks booking, records payment (PAID), transitions booking to CONFIRMED atomically |
-| POST | /api/bookings/:id/cancel | CUSTOMER | Cancel customer booking. Checks cancellation cutoff against `booking_cancellation_hours_limit` setting. If CONFIRMED, marks payment as REFUNDED atomically |
-| POST | /api/bookings/:id/review | CUSTOMER | Submit review for customer's own COMPLETED booking. Body: `rating` (1-5), optional `comment`. 400 if trip not completed, 409 if already reviewed |
 
 ## Database tables
+Migration 014 adds indexes on `bookings.status`, `bookings.created_at`, `packages.status`, `payments.status`, `audit_logs.created_at` and `audit_logs.action` (used by the admin lists, reports and log viewer).
+
 | Table | Notes |
 |---|---|
 | roles | CUSTOMER, PROVIDER, ADMIN, SUPER_ADMIN (seeded) |
@@ -181,6 +183,17 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 
 Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/auth.js` (token & session helpers, role dashboard routing), `js/render.js` (safe DOM builders), `js/main.js` (health check, dark/light mode toggle, dynamic navbar auth state with role badges and Customer navigation links). Images live in `frontend/assets/img/` (served locally; no hotlinking).
 
+## Notes for frontend developers
+- **Token:** `POST /api/auth/login` returns `{ token, user }`; send `Authorization: Bearer <token>` on every request (`js/api.js` does this). Tokens last 8 hours.
+- **Who am I:** `GET /api/auth/me` returns the user; for ADMIN and SUPER_ADMIN it also returns `permissions` (see "Admin permissions"). Use it to hide admin menu items, but the backend enforces them anyway.
+- **Status codes to handle:** 401 (no or expired token: go to login), 403 (not allowed, or the account was disabled or the provider is not approved), 429 (too many failed logins), 503 (maintenance mode: show a notice; admins are not affected).
+- **Lists:** admin lists return arrays; add `?page=&limit=` for the pagination envelope. `GET /api/superadmin/logs` is always paginated.
+- **Dates:** send and receive `YYYY-MM-DD`; months are `YYYY-MM`. Money values are numbers in rupees.
+- **Admin pages still to build:** package moderation, booking monitoring, reports, and the whole super admin area (admins, permissions, logs, settings), plus a wishlist heart/page and a calendar view for customers.
+
+## Running the API tests
+`npm run test:api` (server running first). `tests/api.test.js` is a plain Node script that logs in with the demo accounts, exercises every module (roles, permissions, validation, isolation between providers, money figures, wishlist, calendar, settings, hostile input) and prints a pass/fail list. Each section removes the data it creates, so it can be re-run at any time. Add a section there when you add an endpoint.
+
 ## Conventions
 **Technology (strict):** only HTML5, CSS3, vanilla JS, Node built-ins (`http`), MySQL/MariaDB with `mysql2`, plus `dotenv`, `bcryptjs`, `nodemon` (dev). No frameworks (Express, React, Vue, Angular, Next.js, Bootstrap, Tailwind) and no ORMs. Ask the team before adding any dependency.
 
@@ -190,7 +203,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 **Database:** plural snake_case tables, snake_case columns, PK `id`, FKs named `<entity>_id` with constraints. Parameterized queries only (`pool.execute(sql, [params])`).
 
-**API:** use `ok()` / `fail()` from `backend/utils/response.js`. Status codes: 200/201 success, 400 validation, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict, 500 server error. Routes under `/api`, plural nouns.
+**API:** use `ok()` / `fail()` from `backend/utils/response.js`. Status codes: 200/201 success, 400 validation, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict, 429 too many failed logins, 500 server error, 503 maintenance mode. A request body must be a JSON object (otherwise 400). Server errors return a generic message, never database details or stack traces. Routes under `/api`, plural nouns.
 
 **Pagination:** list endpoints that support it return a plain array by default. Supported by all admin list endpoints (customers, providers, destinations, categories, packages, bookings). Add `?page=<n>&limit=<n>` (limit max 100, default 10) to get `{ "items": [...], "page", "limit", "total", "total_pages" }` instead; invalid values return 400. Helper: `backend/utils/pagination.js`.
 
@@ -200,6 +213,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Final backend hardening: migration 014 (reporting indexes); richer `seed.sql` (sample bookings, payment and review, demo admin permissions); login lockout after 5 failed attempts (429); request bodies must be JSON objects; malformed URLs return 400; 5xx responses no longer expose internal error messages; provider bookings `?status=` filter now works; duplicate departure date on create returns 409 instead of 500; API test suite expanded to cover isolation, reviews, edge cases and hostile input.
 - 2026-11-06: Booking calendar: `GET /api/packages/:id/calendar` and `GET /api/bookings/calendar` (month view with live seat status). Finished CONFIRMED trips are now stored as COMPLETED by an hourly sweep (`completePastBookings`).
 - 2026-11-06: Wishlist: migration 013 (`wishlists` table), `GET/POST /api/wishlist`, `DELETE /api/wishlist/:packageId`.
 - 2026-11-06: Step 5.3/5.4 Super admin system tools: `GET /api/superadmin/logs` (filters, SQL pagination), `GET /api/superadmin/settings`, `PUT /api/superadmin/settings/:key` with per-key validation. `maintenance_mode` is now enforced for non-admin API requests (503).
@@ -248,7 +262,7 @@ All require an APPROVED provider (`requireApprovedProvider`) except the dashboar
 Departure and booking endpoints are described in their own sections below.
 
 Provider frontend pages: `provider-dashboard`, `provider-packages`, `provider-departures`, `provider-bookings`, `provider-performance` (earnings/reviews), `provider-reports`.
-Admin frontend pages: `admin-dashboard`, `admin-customers`, `admin-providers`, `admin-destinations`, `admin-categories`.
+Admin frontend pages built so far: `admin-dashboard`, `admin-customers`, `admin-providers`, `admin-destinations`, `admin-categories`. Backend endpoints exist for package moderation, booking monitoring, reports, admin accounts, permissions, logs and settings; their pages are still to be built.
 
 ## Provider departure management
 
@@ -259,11 +273,11 @@ Approved providers can manage departures only for their own approved packages.
 - `PUT /api/provider/departures/:id`
 - `DELETE /api/provider/departures/:id`
 
-Departure capacity is validated against non-cancelled booked seats. A departure with booking history cannot be deleted. The existing `package_departures` table from migration `005_departures_bookings.sql` is reused; no database migration is required.
+Departure capacity is validated against non-cancelled booked seats. A second departure on the same date for one package returns 409 (on create and on update). A departure with booking history cannot be deleted. The existing `package_departures` table from migration `005_departures_bookings.sql` is reused; no database migration is required.
 
 ### Provider booking management (Step 3.4)
 Approved providers can view booking records associated with packages they own:
-- `GET /api/provider/bookings` — list bookings with customer, package, departure and payment details.
+- `GET /api/provider/bookings?status=` — list bookings with customer, package, departure and payment details; optional `status` filter (`PENDING`, `CONFIRMED`, `CANCELLED`, `COMPLETED`, 400 otherwise).
 - `GET /api/provider/bookings/:id` — retrieve one owned booking.
 - `POST /api/provider/bookings/:id/confirm` — confirm an owned pending booking only when its payment is marked `PAID`.
 

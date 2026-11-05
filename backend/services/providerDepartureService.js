@@ -93,11 +93,19 @@ async function createProviderDeparture(providerId, body) {
     [packageId, providerId]
   );
   if (!owned.length) throw httpError(404, 'Approved package not found');
-  const [result] = await pool.execute(
-    `INSERT INTO package_departures (package_id, start_date, seats_total)
-     VALUES (?, ?, ?)`,
-    [packageId, input.startDate, input.seatsTotal]
-  );
+  let result;
+  try {
+    [result] = await pool.execute(
+      `INSERT INTO package_departures (package_id, start_date, seats_total)
+       VALUES (?, ?, ?)`,
+      [packageId, input.startDate, input.seatsTotal]
+    );
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      throw httpError(409, 'This package already has a departure scheduled for that date');
+    }
+    throw err;
+  }
   return { id: result.insertId, package_id: packageId, start_date: input.startDate, seats_total: input.seatsTotal };
 }
 
