@@ -6,6 +6,7 @@ const { fail } = require('./utils/response');
 const { matchRoute } = require('./utils/matchRoute');
 const { isBlockedByMaintenance } = require('./middleware/maintenance');
 const { testConnection } = require('./config/db');
+const { completePastBookings } = require('./services/bookingService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -40,4 +41,9 @@ server.listen(PORT, async () => {
   console.log(`Server running at http://localhost:${PORT}`);
   if (await testConnection()) console.log('Database connected');
   else console.warn('Database NOT connected - check .env and MySQL');
+
+  // Mark finished trips as COMPLETED now and then every hour
+  const sweep = () => completePastBookings().catch((err) => console.error('Booking sweep failed:', err.message));
+  sweep();
+  setInterval(sweep, 60 * 60 * 1000).unref();
 });

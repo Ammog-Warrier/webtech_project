@@ -100,6 +100,9 @@ const {
   removeWishlistItem,
 } = require('../controllers/wishlistController');
 
+// Booking calendar
+const { packageCalendar, myCalendar } = require('../controllers/calendarController');
+
 const {
   requireAuth,
   requireRole,
@@ -146,6 +149,7 @@ const routes = {
   'GET /api/packages': getPackages,
   'GET /api/packages/:id': getPackage,
   'GET /api/packages/:id/departures': getPackageDepartures,
+  'GET /api/packages/:id/calendar': packageCalendar,
 
   'POST /api/auth/register': register,
   'POST /api/auth/login': login,
@@ -362,6 +366,7 @@ const routes = {
   // Customer booking management
   'POST /api/bookings': requireRole('CUSTOMER', createNewBooking),
   'GET /api/bookings/my': requireRole('CUSTOMER', getMyBookings),
+  'GET /api/bookings/calendar': requireRole('CUSTOMER', myCalendar),
 
   'POST /api/bookings/:id/cancel': requireRole(
     'CUSTOMER',

@@ -21,4 +21,20 @@ function parseDateRange(fromValue, toValue) {
   return { from, to };
 }
 
-module.exports = { parseDateParam, parseDateRange };
+// Validates a YYYY-MM query parameter (defaults to the current month).
+// Returns { month: 'YYYY-MM', start: 'YYYY-MM-01', end: 'YYYY-MM-<last day>' }; throws a 400 error when invalid.
+function parseMonthParam(value) {
+  let month = value === null || value === undefined || value === '' ? null : String(value).trim();
+  if (month === null) {
+    const now = new Date();
+    month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    throw Object.assign(new Error('month must use the format YYYY-MM'), { status: 400 });
+  }
+  const [year, monthNumber] = month.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return { month, start: `${month}-01`, end: `${month}-${String(lastDay).padStart(2, '0')}` };
+}
+
+module.exports = { parseDateParam, parseDateRange, parseMonthParam };

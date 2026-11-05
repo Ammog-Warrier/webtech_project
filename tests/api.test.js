@@ -556,6 +556,115 @@ section('Customer wishlist', async (t) => {
   check('list no longer has it', !(await api('GET', url, { token: t.customer })).data.some((x) => x.package_id === 1));
 });
 
+function addDays(date, days) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+section('Booking calendar', async (t) => {
+  const first = (await api('GET', '/api/packages/1/departures')).data[0];
+  const month = first.start_date.slice(0, 7);
+  const cal = await api('GET', `/api/packages/1/calendar?month=${month}`);
+  check('public package calendar', cal.status === 200 && cal.data.package_id === 1 && cal.data.month === month && cal.data.duration_days === 2, cal.body);
+  const day = cal.data.days.find((d) => d.date === first.start_date);
+  check('day has departure, seats and status', day && day.departure_id === first.id && day.seats_total === first.seats_total && day.seats_available === first.seats_available && ['AVAILABLE', 'LIMITED', 'SOLD_OUT'].includes(day.status), day);
+  check('end_date is the last trip day (2-day trip)', day.end_date === addDays(day.date, 1), day);
+  check('default month is accepted', (await api('GET', '/api/packages/1/calendar')).status === 200);
+  check('empty month has no days', (await api('GET', '/api/packages/1/calendar?month=1999-01')).data.days.length === 0);
+  for (const bad of ['2026-13', '2026-00', '26-05', 'abc', '2026-5']) {
+    check(`month ${bad} -> 400`, (await api('GET', `/api/packages/1/calendar?month=${bad}`)).status === 400);
+  }
+  check('bad package id -> 400', (await api('GET', '/api/packages/abc/calendar')).status === 400);
+  check('unknown package -> 404', (await api('GET', '/api/packages/99999999/calendar')).status === 404);
+
+  // A package with controlled departures: AVAILABLE -> LIMITED -> SOLD_OUT, plus a PAST one
+  const created = await api('POST', '/api/provider/packages', {
+    token: t.provider,
+    body: { title: `Calendar Test ${RUN}`, description: 'd', destination_id: 1, price: 40, duration_days: 3, image_url: '/assets/img/cities.jpg' },
+  });
+  const pid = created.data.id;
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM bookings WHERE departure_id IN (SELECT id FROM package_departures WHERE package_id = ?)', [pid]);
+    await pool.execute('DELETE FROM package_departures WHERE package_id = ?', [pid]);
+    await pool.execute('DELETE FROM packages WHERE id = ?', [pid]);
+  });
+  check('PENDING package has no public calendar -> 404', (await api('GET', `/api/packages/${pid}/calendar`)).status === 404);
+  await api('PATCH', `/api/admin/packages/${pid}/status`, { token: t.admin, body: { status: 'APPROVED' } });
+
+  const future = addDays(new Date().toISOString().slice(0, 10), 40);
+  const dep = await api('POST', '/api/provider/departures', { token: t.provider, body: { package_id: pid, start_date: future, seats_total: 8 } });
+  check('setup: provider adds a departure', dep.status < 300, dep.body);
+  const [pastRow] = await pool.execute("INSERT INTO package_departures (package_id, start_date, seats_total) VALUES (?, DATE_SUB(CURDATE(), INTERVAL 20 DAY), 5)", [pid]);
+  const futureMonth = future.slice(0, 7);
+  const statusOf = async () => (await api('GET', `/api/packages/${pid}/calendar?month=${futureMonth}`)).data.days.find((d) => d.date === future);
+  check('8 of 8 seats left -> AVAILABLE', (await statusOf()).status === 'AVAILABLE');
+  const depId = (await statusOf()).departure_id;
+  const book = async (guests) => {
+    const r = await api('POST', '/api/bookings', { token: t.customer, body: { departure_id: depId, num_guests: guests } });
+    if (r.status >= 300) throw new Error(JSON.stringify(r.body));
+    return r.data.id;
+  };
+  const b1 = await book(5);
+  const mid = await statusOf();
+  check('3 of 8 left -> still AVAILABLE, booked seats counted', mid.seats_available === 3 && mid.status === 'AVAILABLE', mid);
+  await book(1);
+  const limited = await statusOf();
+  check('2 of 8 left (25%) -> LIMITED', limited.seats_available === 2 && limited.status === 'LIMITED', limited);
+  await book(2);
+  const soldOut = await statusOf();
+  check('0 left -> SOLD_OUT', soldOut.seats_available === 0 && soldOut.status === 'SOLD_OUT', soldOut);
+  await api('POST', `/api/bookings/${b1}/cancel`, { token: t.customer });
+  check('cancelling frees seats again', (await statusOf()).seats_available === 5);
+
+  const pastDate = (await pool.query('SELECT DATE_FORMAT(start_date, "%Y-%m-%d") d FROM package_departures WHERE id = ?', [pastRow.insertId]))[0][0].d;
+  const pastCal = await api('GET', `/api/packages/${pid}/calendar?month=${pastDate.slice(0, 7)}`);
+  check('departure in the past -> PAST', pastCal.data.days.some((d) => d.date === pastDate && d.status === 'PAST'), pastCal.body);
+  check('3-day trip ends two days after it starts', (await statusOf()).end_date === addDays(future, 2));
+
+  // customer's own calendar
+  check('my calendar: no token -> 401', (await api('GET', '/api/bookings/calendar')).status === 401);
+  check('my calendar: provider -> 403', (await api('GET', '/api/bookings/calendar', { token: t.provider })).status === 403);
+  check('my calendar: admin -> 403', (await api('GET', '/api/bookings/calendar', { token: t.admin })).status === 403);
+  check('my calendar: bad month -> 400', (await api('GET', '/api/bookings/calendar?month=nope', { token: t.customer })).status === 400);
+  const mine = await api('GET', `/api/bookings/calendar?month=${futureMonth}`, { token: t.customer });
+  const ours = mine.data.bookings.filter((b) => b.package_id === pid);
+  check('my calendar lists my trips (incl. cancelled) with dates', mine.status === 200 && ours.length === 3 && ours.every((b) => b.date === future && b.end_date === addDays(future, 2) && b.package_title && b.destination_name) && ours.some((b) => b.status === 'CANCELLED'), mine.body);
+  check('my calendar: other months are empty of these trips', !(await api('GET', '/api/bookings/calendar?month=1999-01', { token: t.customer })).data.bookings.length);
+  const otherEmail = `cal.${RUN}@example.com`;
+  const reg = await api('POST', '/api/auth/register', { body: { full_name: 'Cal Tester', email: otherEmail, password: 'Secret@123' } });
+  cleanups.push(() => pool.execute('DELETE FROM users WHERE id = ?', [reg.data.id]));
+  const other = await login(otherEmail, 'Secret@123');
+  check("my calendar: other customers don't see my trips", (await api('GET', `/api/bookings/calendar?month=${futureMonth}`, { token: other })).data.bookings.length === 0);
+});
+
+section('Completed-trip sweep', async (t) => {
+  const { completePastBookings } = require('../backend/services/bookingService');
+  const [dep] = await pool.execute("INSERT INTO package_departures (package_id, start_date, seats_total) VALUES (1, DATE_SUB(CURDATE(), INTERVAL 30 DAY), 10)");
+  const [fut] = await pool.execute("INSERT INTO package_departures (package_id, start_date, seats_total) VALUES (2, DATE_ADD(CURDATE(), INTERVAL 200 DAY), 10)");
+  cleanups.push(async () => {
+    await pool.execute('DELETE FROM bookings WHERE departure_id IN (?, ?)', [dep.insertId, fut.insertId]);
+    await pool.execute('DELETE FROM package_departures WHERE id IN (?, ?)', [dep.insertId, fut.insertId]);
+  });
+  const mk = async (departureId, status) => (await pool.execute("INSERT INTO bookings (customer_id, departure_id, num_guests, total_price, status) VALUES (1, ?, 1, 10, ?)", [departureId, status]))[0].insertId;
+  const finished = await mk(dep.insertId, 'CONFIRMED');
+  const finishedPending = await mk(dep.insertId, 'PENDING');
+  const finishedCancelled = await mk(dep.insertId, 'CANCELLED');
+  const upcoming = await mk(fut.insertId, 'CONFIRMED');
+
+  const before = (await api('GET', '/api/admin/reports', { token: t.admin })).data.summary.completed_bookings;
+  const changed = await completePastBookings();
+  const statusOf = async (id) => (await pool.query('SELECT status FROM bookings WHERE id = ?', [id]))[0][0].status;
+  check('sweep reports at least the finished booking', changed >= 1, changed);
+  check('finished CONFIRMED trip -> COMPLETED', (await statusOf(finished)) === 'COMPLETED');
+  check('unpaid PENDING booking is left alone', (await statusOf(finishedPending)) === 'PENDING');
+  check('CANCELLED booking is left alone', (await statusOf(finishedCancelled)) === 'CANCELLED');
+  check('upcoming CONFIRMED trip is left alone', (await statusOf(upcoming)) === 'CONFIRMED');
+  check('running it again changes nothing', (await completePastBookings()) === 0);
+  const after = (await api('GET', '/api/admin/reports', { token: t.admin })).data.summary.completed_bookings;
+  check('admin report now counts it as completed', after - before === 1, { before, after });
+});
+
 // SECTIONS-END (new sections are added above this line)
 
 async function main() {
