@@ -48,6 +48,7 @@ const {
   getMyFinance,
   getMyReviews,
 } = require('../controllers/providerFinanceController');
+const { getMyReports } = require('../controllers/providerReportController');
 
 // Route table: 'METHOD /path' -> async handler(req, res)
 const routes = {
@@ -90,6 +91,7 @@ const routes = {
   // Provider earnings and reviews
   'GET /api/provider/finance': requireApprovedProvider(getMyFinance),
   'GET /api/provider/reviews': requireApprovedProvider(getMyReviews),
+  'GET /api/provider/reports': requireApprovedProvider(getMyReports),
 
   // Customer booking management
   'POST /api/bookings': requireRole('CUSTOMER', createNewBooking),

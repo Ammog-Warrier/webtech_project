@@ -55,6 +55,7 @@ Responses: `{ "success": true, "data": ... }` or `{ "success": false, "error": {
 | GET | /api/users/profile | Bearer token | Return user profile with attached address (`id, full_name, email, phone, role, provider_status, address`). 401 unauthenticated |
 | PUT | /api/users/profile | Bearer token | Update user profile name, phone, and upsert primary address. Body: `full_name`, optional `phone`, optional `address` (`street, city, state, postal_code, country`). 400 invalid input |
 | POST | /api/bookings | CUSTOMER | Create booking reserving seats. Body: `departure_id`, `num_guests`. Locks departure row, verifies seat availability against PENDING/CONFIRMED reservations, computes total_price snapshot, returns booking in PENDING status (201) |
+| GET | /api/provider/reports | Approved provider | Provider business report with date-filtered booking, payment, package, and departure occupancy metrics (optional `from` and `to`, `YYYY-MM-DD`) |
 | GET | /api/bookings/my | CUSTOMER | Return all bookings for the logged-in customer with departure date, destination, payment status, and review status |
 | POST | /api/bookings/:id/pay | CUSTOMER | Simulate payment for a PENDING booking. Body: `method` (`CARD`, `UPI`, `NET_BANKING`). Locks booking, records payment (PAID), transitions booking to CONFIRMED atomically |
 | POST | /api/bookings/:id/cancel | CUSTOMER | Cancel customer booking. Checks cancellation cutoff against `booking_cancellation_hours_limit` setting. If CONFIRMED, marks payment as REFUNDED atomically |
@@ -120,6 +121,7 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 | package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size, upcoming departures with live seat count, direct Book Date button) |
 | booking | Working: `booking.html?package_id=<id>&departure_id=<id>` customer booking form with dynamic departure selection, guest count slider/input, live price breakdown, and seat availability validation |
 | my-bookings | Working: customer booking dashboard showing active/past bookings, status badges, simulated payment modal, cancellation with refund modal, and review submission modal |
+| provider-reports | Provider business reports with date filters, booking/revenue trends, package performance, departure occupancy, and CSV export |
 | profile | Working: view & edit customer contact info, phone, and postal address with upsert functionality |
 | login | Working: token authentication, error alerts, redirect by role |
 | provider-dashboard | Working: provider approval status and package/booking/performance summary |
@@ -144,6 +146,9 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 **Git:** feature branches, small commits, pull requests reviewed by a teammate, never commit `.env`.
 
 ## Changelog
+
+- 2026-11-05: Step 3.6 Provider Reports: added provider-scoped reporting API, date-filtered booking and payment trends, package performance, departure occupancy, and CSV export.
+
 
 - 2026-11-04: Step 2 Customer Booking Flow: implemented departure availability API, concurrent booking creation with pessimistic row locking (`FOR UPDATE`), duplicate payment prevention with single-transaction confirmation, cancellation with eligibility rules and automated refunds, review submission for completed bookings, and user profile with address upsert. Added frontend pages: `booking.html`, `my-bookings.html`, `profile.html`, updated `package.html` and navbar auth routing. Added migration `010_address_user_unique.sql`.
 

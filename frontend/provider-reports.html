@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Business Reports · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a><a href="/destinations.html">Destinations</a><a href="/packages.html">Packages</a>
+      <a href="/provider-dashboard.html">Provider Dashboard</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container">
+    <div class="provider-dashboard-heading">
+      <div><p class="eyebrow">PROVIDER PORTAL</p><h1>Business reports</h1>
+        <p class="muted">Understand booking activity, revenue and departure occupancy.</p></div>
+      <a class="btn btn-secondary" href="/provider-dashboard.html">Back to dashboard</a>
+    </div>
+
+    <p id="report-message" class="auth-alert" role="status" aria-live="polite"></p>
+    <section class="report-filter-panel" aria-label="Report filters">
+      <div class="form-group"><label for="report-from">From date</label><input class="form-input" type="date" id="report-from"></div>
+      <div class="form-group"><label for="report-to">To date</label><input class="form-input" type="date" id="report-to"></div>
+      <button class="btn btn-primary" id="apply-report-filter" type="button">Apply filters</button>
+      <button class="btn-secondary" id="clear-report-filter" type="button">Clear</button>
+      <button class="btn btn-secondary" id="export-report" type="button">Export CSV</button>
+    </section>
+    <p class="muted report-note">Booking trends use booking creation dates. Revenue trends use payment dates. Departure occupancy uses departure dates. All values are limited to your packages.</p>
+
+    <section aria-labelledby="report-summary-title">
+      <h2 id="report-summary-title">Business overview</h2>
+      <div class="provider-stat-grid">
+        <article class="provider-stat-card"><span>Total bookings</span><strong id="report-bookings">—</strong></article>
+        <article class="provider-stat-card"><span>Completed</span><strong id="report-completed">—</strong></article>
+        <article class="provider-stat-card"><span>Cancelled</span><strong id="report-cancelled">—</strong></article>
+        <article class="provider-stat-card"><span>Total guests</span><strong id="report-guests">—</strong></article>
+      </div>
+      <div class="provider-stat-grid provider-stat-grid-small">
+        <article class="provider-stat-card"><span>Paid revenue</span><strong id="report-paid">—</strong></article>
+        <article class="provider-stat-card"><span>Refunded</span><strong id="report-refunded">—</strong></article>
+        <article class="provider-stat-card"><span>Net collected</span><strong id="report-net">—</strong></article>
+        <article class="provider-stat-card"><span>Payment records</span><strong id="report-payments">—</strong></article>
+      </div>
+    </section>
+
+    <section aria-labelledby="monthly-title">
+      <h2 id="monthly-title">Monthly trends</h2>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Month</th><th>Bookings</th><th>Completed</th><th>Cancelled</th><th>Paid</th><th>Refunded</th></tr></thead>
+          <tbody id="monthly-report-rows"><tr><td colspan="6" class="muted">Loading report…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="package-performance-title">
+      <h2 id="package-performance-title">Package performance</h2>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Package</th><th>Bookings</th><th>Guests</th><th>Completed</th><th>Cancelled</th><th>Net collected</th></tr></thead>
+          <tbody id="package-report-rows"><tr><td colspan="6" class="muted">Loading report…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="occupancy-title">
+      <h2 id="occupancy-title">Departure occupancy</h2>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Package</th><th>Departure</th><th>Seats booked</th><th>Capacity</th><th>Available</th><th>Occupancy</th></tr></thead>
+          <tbody id="departure-report-rows"><tr><td colspan="6" class="muted">Loading report…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </div></main>
+
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+  <script src="/js/api.js"></script><script src="/js/auth.js"></script><script src="/js/main.js"></script>
+  <script src="/js/provider-reports.js"></script>
+</body>
+</html>
