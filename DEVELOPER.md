@@ -196,3 +196,24 @@ Admin and Super Admin customer-management endpoints:
 - `PATCH /api/admin/customers/:id/status` accepts `{ "is_active": true|false }` to unblock or block a customer.
 
 These endpoints are restricted to `ADMIN` and `SUPER_ADMIN`. The service filters by the `CUSTOMER` role, so provider and administrator accounts cannot be changed through customer-management routes. No schema migration is required.
+
+
+## Admin provider management (Step 4.3)
+
+Admin and Super Admin provider-management endpoints:
+- `GET /api/admin/providers?search=&status=` lists provider accounts. Status filters: `PENDING`, `APPROVED`, `REJECTED`, `BLOCKED`.
+- `GET /api/admin/providers/:id` returns provider details with package and booking counts.
+- `PATCH /api/admin/providers/:id/status` accepts either `{ "provider_status": "APPROVED" }`, `{ "provider_status": "REJECTED" }`, or `{ "is_active": false|true }` to block/unblock account access.
+
+Approval state (`provider_status`) is kept separate from account access (`is_active`). Only users with the `PROVIDER` role can be changed through these endpoints. Both endpoints and the management page are restricted to `ADMIN` and `SUPER_ADMIN`. No schema migration is required because the existing users table already stores provider approval and active-account state.
+
+## Admin destination management (Step 4.4)
+
+Admin and Super Admin endpoints:
+- `GET /api/admin/destinations?search=` lists destinations and package counts.
+- `GET /api/admin/destinations/:id` returns destination details.
+- `POST /api/admin/destinations` creates a destination with `name`, `description`, and `image_url`.
+- `PUT /api/admin/destinations/:id` updates those fields.
+- `DELETE /api/admin/destinations/:id` deletes a destination only when no packages reference it.
+
+Destination names are unique. Duplicate names return HTTP 409. A destination linked to packages cannot be deleted and returns HTTP 409. All SQL uses parameterized values. No schema migration is required.

@@ -35,6 +35,15 @@ const {
   updateProviderStatus: updateAdminProviderStatus,
 } = require('../controllers/adminProviderController');
 
+// Step 4.4: Admin destination management
+const {
+  getDestinations: getAdminDestinations,
+  getDestinationDetails: getAdminDestinationDetails,
+  createDestination: createAdminDestination,
+  updateDestination: updateAdminDestination,
+  deleteDestination: deleteAdminDestination,
+} = require('../controllers/adminDestinationController');
+
 const {
   requireAuth,
   requireRole,
@@ -125,6 +134,32 @@ const routes = {
   'PATCH /api/admin/providers/:id/status': requireRole(
     ['ADMIN', 'SUPER_ADMIN'],
     updateAdminProviderStatus
+  ),
+
+  // Admin destination management
+  'GET /api/admin/destinations': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    getAdminDestinations
+  ),
+
+  'GET /api/admin/destinations/:id': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    getAdminDestinationDetails
+  ),
+
+  'POST /api/admin/destinations': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    createAdminDestination
+  ),
+
+  'PUT /api/admin/destinations/:id': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    updateAdminDestination
+  ),
+
+  'DELETE /api/admin/destinations/:id': requireRole(
+    ['ADMIN', 'SUPER_ADMIN'],
+    deleteAdminDestination
   ),
 
   // Provider dashboard

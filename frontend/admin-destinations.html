@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Destination Management · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function () {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = saved === 'dark' || saved === 'light'
+        ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a>
+      <a href="/admin-dashboard.html">Admin</a>
+      <a href="/admin-customers.html">Customers</a>
+      <a href="/admin-providers.html">Providers</a>
+      <a href="/admin-destinations.html" class="active">Destinations admin</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container admin-dashboard">
+    <div class="admin-dashboard-heading">
+      <div>
+        <p class="eyebrow">ADMINISTRATION</p>
+        <h1>Destination management</h1>
+        <p class="muted">Create, update and manage destinations in the travel catalogue.</p>
+      </div>
+      <a class="btn btn-secondary" href="/admin-dashboard.html">Back to dashboard</a>
+    </div>
+
+    <div id="destination-status" class="admin-dashboard-status" role="status" aria-live="polite">Loading destinations…</div>
+    <p id="destination-error" class="auth-alert" role="alert"></p>
+
+    <section class="admin-customer-toolbar" aria-label="Destination search">
+      <label class="admin-customer-search" for="destination-search">Search destinations</label>
+      <input id="destination-search" type="search" placeholder="Search by name or description">
+      <button type="button" id="refresh-destinations" class="btn btn-secondary">Refresh</button>
+      <button type="button" id="new-destination" class="btn btn-primary">Add destination</button>
+    </section>
+
+    <section id="destination-form-section" class="admin-customer-details" hidden>
+      <h2 id="destination-form-title">Add destination</h2>
+      <form id="destination-form">
+        <input type="hidden" id="destination-id">
+        <div class="form-group">
+          <label for="destination-name">Name</label>
+          <input id="destination-name" name="name" type="text" maxlength="100" required>
+        </div>
+        <div class="form-group">
+          <label for="destination-description">Description</label>
+          <textarea id="destination-description" name="description" rows="4" required></textarea>
+        </div>
+        <div class="form-group">
+          <label for="destination-image">Image URL</label>
+          <input id="destination-image" name="image_url" type="url" maxlength="255" placeholder="https://example.com/image.jpg" required>
+        </div>
+        <div class="admin-customer-actions">
+          <button type="submit" id="save-destination" class="btn btn-primary">Save destination</button>
+          <button type="button" id="cancel-destination" class="btn btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-customer-table-wrap" aria-labelledby="destination-list-title">
+      <h2 id="destination-list-title">Destinations</h2>
+      <div class="table-responsive">
+        <table class="admin-customer-table">
+          <thead><tr><th>Destination</th><th>Description</th><th>Packages</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody id="destination-table-body"><tr><td colspan="5">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </div></main>
+
+  <footer class="site-footer"><div class="container">
+    <span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span>
+    <p>© Local Tourism Package Booking System</p>
+  </div></footer>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/admin-destinations.js"></script>
+</body>
+</html>
