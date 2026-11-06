@@ -193,6 +193,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 ## Notes for frontend developers
 - **Token:** `POST /api/auth/login` returns `{ token, user }`; send `Authorization: Bearer <token>` on every request (`js/api.js` does this). Tokens last 8 hours.
 - **Who am I:** `GET /api/auth/me` returns the user; for ADMIN and SUPER_ADMIN it also returns `permissions` (see "Admin permissions"). Use it to hide admin menu items, but the backend enforces them anyway.
+- **Handled globally in `js/api.js`:** a 401 with a stored token clears the session and sends the user to `login.html?redirect=...`; a 503 shows a maintenance banner (`showMaintenanceNotice` in `js/main.js`). 429 and other messages come from the API and are shown by the page (e.g. the login form).
 - **Status codes to handle:** 401 (no or expired token: go to login), 403 (not allowed, or the account was disabled or the provider is not approved), 429 (too many failed logins), 503 (maintenance mode: show a notice; admins are not affected).
 - **Lists:** admin lists return arrays; add `?page=&limit=` for the pagination envelope. `GET /api/superadmin/logs` is always paginated.
 - **Dates:** send and receive `YYYY-MM-DD`; months are `YYYY-MM`. Money values are numbers in rupees.
@@ -220,6 +221,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Frontend error handling: expired tokens redirect to login, maintenance mode (503) shows a site banner.
 - 2026-11-06: Booking calendar frontend: shared `calendar.js` widget, departure calendar on the package page and trip calendar on my-bookings.
 - 2026-11-06: Customer wishlist frontend: `wishlist` page, heart toggles on package cards and detail page, navbar link (`js/wishlist.js`, `js/wishlist-page.js`).
 - 2026-11-06: Super admin frontend: `superadmin-settings` and `superadmin-logs` pages plus dashboard shortcuts.

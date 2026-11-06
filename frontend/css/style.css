@@ -1040,3 +1040,6 @@ a.admin-shortcut-card:hover { transform: translateY(-2px); border-color: var(--c
 .calendar-cell.status-past { opacity: .55; }
 a.calendar-cell:hover { outline: 2px solid var(--c-primary); }
 @media (max-width: 600px) { .calendar-cell { min-height: 2.8rem; padding: .15rem; font-size: .75rem; } .calendar-cell small { display: none; } }
+
+/* Maintenance notice */
+.maintenance-notice { background: #fdecea; color: #7a1f16; border-bottom: 2px solid #c0392b; padding: .7rem 1rem; text-align: center; font-weight: 600; }

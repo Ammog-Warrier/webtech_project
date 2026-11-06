@@ -21,7 +21,7 @@ Node.js 18+ and MySQL 8 or MariaDB (running locally).
 
 ## Project structure
 ```
-frontend/   public pages, role folders (customer, provider, admin, superadmin), css/, js/, assets/
+frontend/   pages (prefixed by role: admin-, provider-, superadmin-), css/, js/, assets/
 backend/    server.js, config/, routes/, controllers/, middleware/, services/, utils/
 database/   schema.sql, seed.sql, migrations/
 ```
