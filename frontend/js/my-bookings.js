@@ -20,6 +20,7 @@ async function initMyBookingsPage() {
 
 async function loadBookings() {
   const container = document.getElementById('bookings-list');
+  refreshTripCalendar();
   try {
     const bookings = await apiFetch('/bookings/my');
     cachedBookings = bookings;

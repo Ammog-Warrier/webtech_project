@@ -78,6 +78,13 @@ async function loadPackage() {
     // Departures & Book button
     info.append(renderDeparturesSection(p.id, departures));
 
+    const calendarBox = el('div', 'calendar-box');
+    calendarBox.append(el('h3', null, 'Departure Calendar'));
+    const calendarHost = el('div');
+    calendarBox.append(calendarHost);
+    info.append(calendarBox);
+    renderPackageCalendar(calendarHost, p.id, monthKey(new Date()));
+
     const generalBookBtn = el('a', 'btn btn-primary', 'Book This Package');
     generalBookBtn.href = `/booking.html?package_id=${encodeURIComponent(p.id)}`;
     generalBookBtn.classList.add('book-package-btn');
