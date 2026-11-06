@@ -107,3 +107,16 @@ function labeledField(labelText, control, id) {
   group.append(label, control);
   return group;
 }
+
+// Button carrying data-* attributes, for pages that use event delegation on the table.
+function dataButton(text, className, dataset) {
+  const b = el('button', `btn ${className} btn-small`, text);
+  b.type = 'button';
+  Object.entries(dataset).forEach(([key, value]) => { b.dataset[key] = value; });
+  return b;
+}
+
+// Fills a details panel with a heading and "Label: value" lines.
+function fillDetailPanel(panel, heading, lines) {
+  panel.replaceChildren(el('h2', null, heading), ...lines.map(([label, value]) => detailLine(label, value)));
+}

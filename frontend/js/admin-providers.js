@@ -1,9 +1,3 @@
-function providerEscape(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[char]);
-}
-
 function setProviderMessage(message, isError = false) {
   const status = document.getElementById('provider-status-message');
   status.textContent = message;
@@ -16,47 +10,34 @@ function showProviderError(message) {
   error.className = 'auth-alert auth-alert-error show';
 }
 
-function providerStatusLabel(provider) {
-  if (Number(provider.is_active) !== 1) return 'Blocked';
-  return String(provider.provider_status || 'PENDING').charAt(0) +
-    String(provider.provider_status || 'PENDING').slice(1).toLowerCase();
-}
-
 function renderProviders(providers) {
   const body = document.getElementById('provider-table-body');
-  if (!providers.length) {
-    body.innerHTML = '<tr><td colspan="7">No providers found.</td></tr>';
-    return;
-  }
-
-  body.innerHTML = providers.map((provider) => {
+  fillTable(body, providers.map((provider) => {
     const active = Number(provider.is_active) === 1;
     const status = provider.provider_status;
-    const label = providerStatusLabel(provider);
-    const badgeClass = !active ? 'is-blocked' : (status === 'APPROVED' ? 'is-active' : 'is-pending');
-    const approvalActions = active && status === 'PENDING'
-      ? `<button type="button" class="btn btn-primary btn-small" data-provider-status="${provider.id}" data-next-status="APPROVED">Approve</button>
-         <button type="button" class="btn btn-danger btn-small" data-provider-status="${provider.id}" data-next-status="REJECTED">Reject</button>`
-      : (active && status === 'REJECTED'
-        ? `<button type="button" class="btn btn-primary btn-small" data-provider-status="${provider.id}" data-next-status="APPROVED">Approve</button>`
-        : '');
-    const accessAction = active
-      ? `<button type="button" class="btn btn-danger btn-small" data-provider-active="${provider.id}" data-next-active="false">Block</button>`
-      : `<button type="button" class="btn btn-primary btn-small" data-provider-active="${provider.id}" data-next-active="true">Unblock</button>`;
-    return `<tr>
-      <td><strong>${providerEscape(provider.full_name)}</strong><small>#${provider.id}</small></td>
-      <td>${providerEscape(provider.email)}<small>${providerEscape(provider.phone || 'No phone provided')}</small></td>
-      <td>${provider.package_count}</td>
-      <td>${provider.booking_count}</td>
-      <td>${providerEscape(provider.created_at)}</td>
-      <td><span class="admin-account-status ${badgeClass}">${providerEscape(label)}</span></td>
-      <td><div class="admin-customer-actions">
-        <button type="button" class="btn btn-secondary btn-small" data-provider-details="${provider.id}">Details</button>
-        ${approvalActions}
-        ${accessAction}
-      </div></td>
-    </tr>`;
-  }).join('');
+    const actions = el('div', 'admin-customer-actions');
+    actions.append(dataButton('Details', 'btn-secondary', { providerDetails: provider.id }));
+    if (active && status !== 'APPROVED') {
+      actions.append(dataButton('Approve', 'btn-primary', { providerStatus: provider.id, nextStatus: 'APPROVED' }));
+    }
+    if (active && status === 'PENDING') {
+      actions.append(dataButton('Reject', 'btn-danger', { providerStatus: provider.id, nextStatus: 'REJECTED' }));
+    }
+    actions.append(active
+      ? dataButton('Block', 'btn-danger', { providerActive: provider.id, nextActive: 'false' })
+      : dataButton('Unblock', 'btn-primary', { providerActive: provider.id, nextActive: 'true' }));
+    const tr = el('tr');
+    tr.append(
+      cellWithSub(provider.full_name, `#${provider.id}`),
+      cellWithSub(provider.email, provider.phone || 'No phone provided'),
+      cell(provider.package_count),
+      cell(provider.booking_count),
+      cell(provider.created_at),
+      cell(statusPill(active ? status : 'BLOCKED')),
+      cell(actions)
+    );
+    return tr;
+  }), 7, 'No providers found.');
 }
 
 async function loadProviders() {
@@ -88,15 +69,16 @@ async function showProviderDetails(providerId) {
   try {
     const provider = await apiFetch(`/admin/providers/${providerId}`);
     panel.hidden = false;
-    panel.innerHTML = `<h2>Provider details</h2>
-      <p><strong>Name:</strong> ${providerEscape(provider.full_name)}</p>
-      <p><strong>Email:</strong> ${providerEscape(provider.email)}</p>
-      <p><strong>Phone:</strong> ${providerEscape(provider.phone || 'Not provided')}</p>
-      <p><strong>Provider approval:</strong> ${providerEscape(provider.provider_status)}</p>
-      <p><strong>Account access:</strong> ${Number(provider.is_active) === 1 ? 'Active' : 'Blocked'}</p>
-      <p><strong>Packages:</strong> ${provider.package_count}</p>
-      <p><strong>Bookings:</strong> ${provider.booking_count}</p>
-      <p><strong>Joined:</strong> ${providerEscape(provider.created_at)}</p>`;
+    fillDetailPanel(panel, 'Provider details', [
+      ['Name', provider.full_name],
+      ['Email', provider.email],
+      ['Phone', provider.phone || 'Not provided'],
+      ['Provider approval', provider.provider_status],
+      ['Account access', Number(provider.is_active) === 1 ? 'Active' : 'Blocked'],
+      ['Packages', provider.package_count],
+      ['Bookings', provider.booking_count],
+      ['Joined', provider.created_at],
+    ]);
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (err) {
     showProviderError(err.message || 'Unable to load provider details.');

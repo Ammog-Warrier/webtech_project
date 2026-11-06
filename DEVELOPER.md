@@ -216,6 +216,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Security and style cleanup: admin customer, provider and destination tables and details, and the customer review/payment snippets, are built with DOM nodes and `textContent` instead of `innerHTML` (the review comment was not escaped); static inline styles moved into CSS classes. Admin helpers `dataButton` and `fillDetailPanel` added.
 - 2026-11-06: Admin frontend: package moderation, booking monitoring and reports pages; shared `admin-common.js`; dashboard and category page updates.
 - 2026-11-06: Final backend hardening: migration 014 (reporting indexes); richer `seed.sql` (sample bookings, payment and review, demo admin permissions); login lockout after 5 failed attempts (429); request bodies must be JSON objects; malformed URLs return 400; 5xx responses no longer expose internal error messages; provider bookings `?status=` filter now works; duplicate departure date on create returns 409 instead of 500; API test suite expanded to cover isolation, reviews, edge cases and hostile input.
 - 2026-11-06: Booking calendar: `GET /api/packages/:id/calendar` and `GET /api/bookings/calendar` (month view with live seat status). Finished CONFIRMED trips are now stored as COMPLETED by an hourly sweep (`completePastBookings`).

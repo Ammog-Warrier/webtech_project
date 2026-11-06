@@ -1,9 +1,3 @@
-function escapeDestinationHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[char]);
-}
-
 function setDestinationStatus(message, isError = false) {
   const status = document.getElementById('destination-status');
   status.textContent = message;
@@ -24,23 +18,22 @@ function clearDestinationError() {
 
 function renderDestinations(destinations) {
   const body = document.getElementById('destination-table-body');
-  if (!destinations.length) {
-    body.innerHTML = '<tr><td colspan="5">No destinations found.</td></tr>';
-    return;
-  }
-
-  body.innerHTML = destinations.map((destination) => `
-    <tr>
-      <td><strong>${escapeDestinationHtml(destination.name)}</strong><small>#${destination.id}</small></td>
-      <td>${escapeDestinationHtml(destination.description)}</td>
-      <td>${destination.package_count}</td>
-      <td>${escapeDestinationHtml(destination.created_at)}</td>
-      <td><div class="admin-customer-actions">
-        <button type="button" class="btn btn-secondary btn-small" data-edit-destination="${destination.id}">Edit</button>
-        <button type="button" class="btn btn-danger btn-small" data-delete-destination="${destination.id}">Delete</button>
-      </div></td>
-    </tr>
-  `).join('');
+  fillTable(body, destinations.map((destination) => {
+    const actions = el('div', 'admin-customer-actions');
+    actions.append(
+      dataButton('Edit', 'btn-secondary', { editDestination: destination.id }),
+      dataButton('Delete', 'btn-danger', { deleteDestination: destination.id })
+    );
+    const tr = el('tr');
+    tr.append(
+      cellWithSub(destination.name, `#${destination.id}`),
+      cell(destination.description),
+      cell(destination.package_count),
+      cell(destination.created_at),
+      cell(actions)
+    );
+    return tr;
+  }), 5, 'No destinations found.');
 }
 
 async function loadDestinations() {

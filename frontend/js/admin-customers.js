@@ -1,9 +1,3 @@
-function customerEscape(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[char]);
-}
-
 function setCustomerStatus(message, isError = false) {
   const status = document.getElementById('customer-status');
   status.textContent = message;
@@ -18,25 +12,24 @@ function showCustomerError(message) {
 
 function renderCustomers(customers) {
   const body = document.getElementById('customer-table-body');
-  if (!customers.length) {
-    body.innerHTML = '<tr><td colspan="6">No customers found.</td></tr>';
-    return;
-  }
-
-  body.innerHTML = customers.map((customer) => {
+  fillTable(body, customers.map((customer) => {
     const active = Number(customer.is_active) === 1;
-    return `<tr>
-      <td><strong>${customerEscape(customer.full_name)}</strong><small>#${customer.id}</small></td>
-      <td>${customerEscape(customer.email)}<small>${customerEscape(customer.phone || 'No phone provided')}</small></td>
-      <td>${customer.booking_count}</td>
-      <td>${customerEscape(customer.created_at)}</td>
-      <td><span class="admin-account-status ${active ? 'is-active' : 'is-blocked'}">${active ? 'Active' : 'Blocked'}</span></td>
-      <td><div class="admin-customer-actions">
-        <button type="button" class="btn btn-secondary btn-small" data-customer-details="${customer.id}">Details</button>
-        <button type="button" class="btn ${active ? 'btn-danger' : 'btn-primary'} btn-small" data-customer-toggle="${customer.id}" data-next-active="${active ? 'false' : 'true'}">${active ? 'Block' : 'Unblock'}</button>
-      </div></td>
-    </tr>`;
-  }).join('');
+    const actions = el('div', 'admin-customer-actions');
+    actions.append(
+      dataButton('Details', 'btn-secondary', { customerDetails: customer.id }),
+      dataButton(active ? 'Block' : 'Unblock', active ? 'btn-danger' : 'btn-primary', { customerToggle: customer.id, nextActive: active ? 'false' : 'true' })
+    );
+    const tr = el('tr');
+    tr.append(
+      cellWithSub(customer.full_name, `#${customer.id}`),
+      cellWithSub(customer.email, customer.phone || 'No phone provided'),
+      cell(customer.booking_count),
+      cell(customer.created_at),
+      cell(statusPill(active ? 'ACTIVE' : 'BLOCKED')),
+      cell(actions)
+    );
+    return tr;
+  }), 6, 'No customers found.');
 }
 
 async function loadCustomers() {
@@ -68,13 +61,14 @@ async function showCustomerDetails(customerId) {
   try {
     const customer = await apiFetch(`/admin/customers/${customerId}`);
     panel.hidden = false;
-    panel.innerHTML = `<h2>Customer details</h2>
-      <p><strong>Name:</strong> ${customerEscape(customer.full_name)}</p>
-      <p><strong>Email:</strong> ${customerEscape(customer.email)}</p>
-      <p><strong>Phone:</strong> ${customerEscape(customer.phone || 'Not provided')}</p>
-      <p><strong>Bookings:</strong> ${customer.booking_count}</p>
-      <p><strong>Joined:</strong> ${customerEscape(customer.created_at)}</p>
-      <p><strong>Status:</strong> ${Number(customer.is_active) === 1 ? 'Active' : 'Blocked'}</p>`;
+    fillDetailPanel(panel, 'Customer details', [
+      ['Name', customer.full_name],
+      ['Email', customer.email],
+      ['Phone', customer.phone || 'Not provided'],
+      ['Bookings', customer.booking_count],
+      ['Joined', customer.created_at],
+      ['Status', Number(customer.is_active) === 1 ? 'Active' : 'Blocked'],
+    ]);
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (err) {
     showCustomerError(err.message || 'Unable to load customer details.');

@@ -997,3 +997,15 @@ a.admin-shortcut-card:hover { transform: translateY(-2px); border-color: var(--c
   .toolbar .form-group, .toolbar .btn { flex:1 1 100%; }
   .data-table th, .data-table td { padding:.6rem .6rem; }
 }
+
+/* Utility and component classes that replace former inline styles */
+.small-text { font-size: .85rem; }
+.empty-state { text-align: center; }
+.empty-state .btn { margin-top: 1rem; display: inline-block; }
+.booking-card.is-highlighted { border: 2px solid var(--c-primary); box-shadow: 0 0 15px rgba(14, 124, 134, .35); }
+.booking-title { font-size: 1.15rem; }
+.review-box { background: rgba(0, 0, 0, .03); padding: .5rem; border-radius: 6px; }
+.review-stars { color: #f59e0b; font-weight: bold; }
+.modal-form { margin-top: 1rem; }
+.optional-hint { font-weight: normal; font-size: .85em; }
+.page-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
