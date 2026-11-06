@@ -45,6 +45,17 @@ function initTheme() {
   }
 }
 
+// Shown when the API answers 503 because a super admin switched maintenance mode on.
+function showMaintenanceNotice(message) {
+  if (document.getElementById('maintenance-notice')) return;
+  const banner = document.createElement('div');
+  banner.id = 'maintenance-notice';
+  banner.className = 'maintenance-notice';
+  banner.setAttribute('role', 'alert');
+  banner.textContent = message || 'The site is under maintenance. Please try again later.';
+  document.body.prepend(banner);
+}
+
 // Demonstrates Fetch API: show backend/database status in the footer.
 async function showHealth() {
   const el = document.getElementById('health-status');
@@ -220,7 +231,13 @@ function syncNavbarAuth() {
       profileLink.textContent = 'Profile';
       profileLink.className = 'nav-link-customer';
 
+      const wishlistLink = document.createElement('a');
+      wishlistLink.href = '/wishlist.html';
+      wishlistLink.textContent = 'Wishlist';
+      wishlistLink.className = 'nav-link-customer';
+
       authContainer.prepend(profileLink);
+      authContainer.prepend(wishlistLink);
       authContainer.prepend(myBookingsLink);
     }
 

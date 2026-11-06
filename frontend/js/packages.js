@@ -1,5 +1,6 @@
 
 let allPackages = [];
+let savedIds = null; // Set of wishlisted package ids for customers, otherwise null
 
 function renderPackages() {
   const grid = document.getElementById('packages-grid');
@@ -44,8 +45,8 @@ let filtered = allPackages.filter((p) => {
   }
 
   grid.replaceChildren(
-    ...filtered.map((p) =>
-      card(
+    ...filtered.map((p) => {
+      const article = card(
         p.image_url,
         p.title,
         {
@@ -55,8 +56,10 @@ let filtered = allPackages.filter((p) => {
         { text: p.description },
         { text: `$${Number(p.price).toFixed(2)}`, cls: 'price' },
         { text: 'View details', href: `/package.html?id=${p.id}` }
-      )
-    )
+      );
+      if (savedIds) article.querySelector('.card-body').append(wishlistButton(p.id, savedIds));
+      return article;
+    })
   );
 }
 
@@ -81,6 +84,7 @@ async function loadPackages() {
       : '';
 
     allPackages = await apiFetch(`/packages${query}`);
+    if (savedIds === null) savedIds = await loadWishlistIds();
 
     renderPackages();
   } catch (err) {

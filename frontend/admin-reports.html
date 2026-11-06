@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Platform reports · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a>
+      <a href="/admin-dashboard.html">Admin</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container admin-dashboard">
+    <div class="admin-dashboard-heading">
+      <div><p class="eyebrow">ADMINISTRATION</p><h1>Platform reports</h1><p class="muted">Bookings, revenue and top performers. Figures use the booking date.</p></div>
+      <a class="btn btn-secondary" href="/admin-dashboard.html">Back to dashboard</a>
+    </div>
+    <div id="page-status" class="admin-dashboard-status" role="status" aria-live="polite">Loading…</div>
+    <p id="page-error" class="auth-alert" role="alert"></p>
+
+    <form class="toolbar" id="filters" aria-label="Report date range">
+      <div class="form-group"><label for="from">From</label><input id="from" type="date"></div>
+      <div class="form-group"><label for="to">To</label><input id="to" type="date"></div>
+      <button type="submit" class="btn btn-primary">Apply</button>
+      <button type="button" id="reset" class="btn btn-secondary">All time</button>
+    </form>
+    <div id="report" hidden>
+      <div class="admin-stat-grid" id="summary-cards"></div>
+      <section class="report-section"><h2>Monthly trend</h2><div class="table-responsive"><table class="data-table">
+        <thead><tr><th>Month</th><th>Bookings</th><th>Cancelled</th><th>Paid</th><th>Refunded</th></tr></thead><tbody id="monthly-rows"></tbody></table></div></section>
+      <section class="report-section"><h2>Top packages</h2><div class="table-responsive"><table class="data-table">
+        <thead><tr><th>Package</th><th>Bookings</th><th>Guests</th><th>Revenue</th></tr></thead><tbody id="package-rows"></tbody></table></div></section>
+      <section class="report-section"><h2>Top providers</h2><div class="table-responsive"><table class="data-table">
+        <thead><tr><th>Provider</th><th>Bookings</th><th>Revenue</th></tr></thead><tbody id="provider-rows"></tbody></table></div></section>
+      <section class="report-section"><h2>Destinations</h2><div class="table-responsive"><table class="data-table">
+        <thead><tr><th>Destination</th><th>Bookings</th><th>Revenue</th></tr></thead><tbody id="destination-rows"></tbody></table></div></section>
+      <section class="report-section"><h2>Categories</h2><div class="table-responsive"><table class="data-table">
+        <thead><tr><th>Category</th><th>Bookings</th><th>Revenue</th></tr></thead><tbody id="category-rows"></tbody></table></div></section>
+      <p class="muted report-section">Revenue is money still held (paid). Refunded bookings are shown separately. Package counts below are a snapshot, not filtered by date.</p>
+      <div class="admin-stat-grid admin-stat-grid-small" id="catalogue-cards"></div>
+    </div>
+  </div></main>
+
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/admin-common.js"></script>
+  <script src="/js/admin-reports.js"></script>
+</body>
+</html>

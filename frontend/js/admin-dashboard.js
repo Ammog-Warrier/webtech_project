@@ -49,6 +49,16 @@ function renderAdminDashboard(data) {
   setAdminStat('admin-last-updated', `Updated ${new Date().toLocaleTimeString('en-IN')}`);
 }
 
+// Hides shortcuts the signed-in admin may not use (the backend enforces this as well).
+function applyShortcutVisibility(user) {
+  document.querySelectorAll('[data-permission]').forEach((card) => {
+    card.hidden = user.role === 'ADMIN' && !(user.permissions || []).includes(card.dataset.permission);
+  });
+  document.querySelectorAll('[data-role]').forEach((card) => {
+    card.hidden = card.dataset.role !== user.role;
+  });
+}
+
 async function loadAdminDashboard() {
   const content = document.getElementById('admin-dashboard-content');
   const errorBox = document.getElementById('admin-dashboard-error');
@@ -77,6 +87,7 @@ async function loadAdminDashboard() {
       return;
     }
 
+    applyShortcutVisibility(user);
     const dashboard = await apiFetch('/admin/dashboard');
     renderAdminDashboard(dashboard);
     content.hidden = false;

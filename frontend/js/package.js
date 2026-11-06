@@ -78,11 +78,24 @@ async function loadPackage() {
     // Departures & Book button
     info.append(renderDeparturesSection(p.id, departures));
 
+    const calendarBox = el('div', 'calendar-box');
+    calendarBox.append(el('h3', null, 'Departure Calendar'));
+    const calendarHost = el('div');
+    calendarBox.append(calendarHost);
+    info.append(calendarBox);
+    renderPackageCalendar(calendarHost, p.id, monthKey(new Date()));
+
     const generalBookBtn = el('a', 'btn btn-primary', 'Book This Package');
     generalBookBtn.href = `/booking.html?package_id=${encodeURIComponent(p.id)}`;
-    generalBookBtn.style.marginTop = '1.5rem';
-    generalBookBtn.style.display = 'inline-block';
+    generalBookBtn.classList.add('book-package-btn');
     info.append(generalBookBtn);
+
+    const saved = await loadWishlistIds();
+    if (saved) {
+      const heart = wishlistButton(p.id, saved);
+      heart.classList.add('wishlist-inline');
+      info.append(heart);
+    }
 
     const layout = el('div', 'detail');
     layout.append(img, info);

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin accounts · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a>
+      <a href="/admin-dashboard.html">Admin</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container admin-dashboard">
+    <div class="admin-dashboard-heading">
+      <div><p class="eyebrow">SUPER ADMIN</p><h1>Admin accounts</h1><p class="muted">Create admins, control their access and choose what each admin may do.</p></div>
+      <a class="btn btn-secondary" href="/admin-dashboard.html">Back to dashboard</a>
+    </div>
+    <div id="page-status" class="admin-dashboard-status" role="status" aria-live="polite">Loading…</div>
+    <p id="page-error" class="auth-alert" role="alert"></p>
+
+    <form class="toolbar" id="filters" aria-label="Admin filters">
+      <div class="form-group form-group-grow"><label for="search">Search</label><input id="search" type="search" placeholder="Name, email or phone"></div>
+      <div class="form-group"><label for="status">Status</label>
+        <select id="status"><option value="ALL">All admins</option><option value="ACTIVE">Active</option><option value="DISABLED">Disabled</option></select></div>
+      <button type="button" id="refresh" class="btn btn-secondary">Refresh</button>
+      <button type="button" id="new-admin" class="btn btn-primary">New admin</button>
+    </form>
+
+    <section id="admin-form-panel" class="detail-panel" hidden aria-labelledby="admin-form-title">
+      <h2 id="admin-form-title">New admin</h2>
+      <form id="admin-form" novalidate>
+        <div class="form-group"><label for="admin-name">Full name</label><input id="admin-name" maxlength="100" required></div>
+        <div class="form-group"><label for="admin-email">Email</label><input id="admin-email" type="email" maxlength="150" required></div>
+        <div class="form-group"><label for="admin-phone">Phone <span class="muted optional-hint">(optional)</span></label><input id="admin-phone" type="tel" maxlength="20"></div>
+        <div class="form-group"><label for="admin-password" id="admin-password-label">Password</label><input id="admin-password" type="password" minlength="8" maxlength="72" autocomplete="new-password"></div>
+        <div class="button-group">
+          <button type="submit" id="admin-save" class="btn btn-primary">Create admin</button>
+          <button type="button" id="admin-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <div class="table-responsive"><table class="data-table">
+      <thead><tr><th>Admin</th><th>Contact</th><th>Permissions</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table></div>
+    <div id="pager" class="pager"></div>
+
+    <section id="permission-panel" class="detail-panel" hidden aria-labelledby="permission-title">
+      <h2 id="permission-title">Permissions</h2>
+      <p class="muted">Tick what this admin may do. Changes apply on their next request.</p>
+      <div id="permission-list" class="permission-list"></div>
+      <div class="button-group">
+        <button type="button" id="permission-save" class="btn btn-primary">Save permissions</button>
+        <button type="button" id="permission-cancel" class="btn btn-secondary">Close</button>
+      </div>
+    </section>
+
+  </div></main>
+
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/admin-common.js"></script>
+  <script src="/js/superadmin-admins.js"></script>
+</body>
+</html>

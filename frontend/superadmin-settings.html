@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>System settings · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a>
+      <a href="/admin-dashboard.html">Admin</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container admin-dashboard">
+    <div class="admin-dashboard-heading">
+      <div><p class="eyebrow">SUPER ADMIN</p><h1>System settings</h1><p class="muted">Change platform-wide behaviour. Only validated settings can be edited.</p></div>
+      <a class="btn btn-secondary" href="/admin-dashboard.html">Back to dashboard</a>
+    </div>
+    <div id="page-status" class="admin-dashboard-status" role="status" aria-live="polite">Loading…</div>
+    <p id="page-error" class="auth-alert" role="alert"></p>
+
+    <div class="table-responsive"><table class="data-table">
+      <thead><tr><th>Setting</th><th>Value</th><th>Last changed</th><th>Actions</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table></div>
+    <p class="muted">Maintenance mode blocks the site for customers and providers (admins and super admins can still sign in). Every change is written to the system logs.</p>
+  </div></main>
+
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/admin-common.js"></script>
+  <script src="/js/superadmin-settings.js"></script>
+</body>
+</html>

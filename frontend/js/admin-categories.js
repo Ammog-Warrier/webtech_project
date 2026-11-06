@@ -179,11 +179,8 @@
 
   searchInput.addEventListener('input', loadCategories);
 
-  // Authentication
-  if (typeof requireAuth === 'function') {
-    requireAuth(['ADMIN', 'SUPER_ADMIN']);
-  }
-
-  // Initial load
-  loadCategories();
+  // Route guard, then the first load
+  guardPage(['ADMIN', 'SUPER_ADMIN'], 'MANAGE_CATALOGUE').then((user) => {
+    if (user) loadCategories();
+  });
 })();

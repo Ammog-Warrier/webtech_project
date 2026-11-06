@@ -20,6 +20,7 @@ async function initMyBookingsPage() {
 
 async function loadBookings() {
   const container = document.getElementById('bookings-list');
+  refreshTripCalendar();
   try {
     const bookings = await apiFetch('/bookings/my');
     cachedBookings = bookings;
@@ -32,16 +33,13 @@ async function loadBookings() {
 function renderBookings(container, bookings) {
   if (!bookings.length) {
     container.replaceChildren();
-    const emptyBox = el('div', 'form-card');
-    emptyBox.style.textAlign = 'center';
+    const emptyBox = el('div', 'form-card empty-state');
     emptyBox.append(
       el('h3', null, 'No bookings yet'),
       el('p', 'muted', 'You have not booked any tours or experiences yet.'),
       el('a', 'btn btn-primary', 'Browse Packages')
     );
     emptyBox.querySelector('a').href = '/packages.html';
-    emptyBox.querySelector('a').style.marginTop = '1rem';
-    emptyBox.querySelector('a').style.display = 'inline-block';
     container.append(emptyBox);
     return;
   }
@@ -52,8 +50,7 @@ function renderBookings(container, bookings) {
   bookings.forEach((b) => {
     const card = el('div', 'booking-card');
     if (highlightId && String(b.id) === String(highlightId)) {
-      card.style.border = '2px solid var(--c-primary)';
-      card.style.boxShadow = '0 0 15px rgba(14, 124, 134, 0.35)';
+      card.classList.add('is-highlighted');
     }
 
     const img = el('img', 'booking-card-img');
@@ -65,7 +62,7 @@ function renderBookings(container, bookings) {
     // Header: Title & Status Badge
     const header = el('div', 'booking-card-header');
     const title = el('h3', null, b.package_title);
-    title.style.fontSize = '1.15rem';
+    title.classList.add('booking-title');
 
     let badgeClass = 'badge-pending';
     if (b.status === 'CONFIRMED') badgeClass = 'badge-confirmed';
@@ -89,21 +86,17 @@ function renderBookings(container, bookings) {
 
     // Payment Info snippet
     if (b.payment_status) {
-      const payInfo = el('p', 'muted');
-      payInfo.style.fontSize = '0.85rem';
-      payInfo.innerHTML = `Payment: <strong>${b.payment_status}</strong> (${b.payment_method || 'N/A'})`;
+      const payInfo = el('p', 'muted small-text');
+      payInfo.append('Payment: ', el('strong', null, b.payment_status), ` (${b.payment_method || 'N/A'})`);
       body.append(payInfo);
     }
 
     // Review snippet
     if (b.review_id) {
-      const reviewBox = el('div');
-      reviewBox.style.background = 'rgba(0,0,0,0.03)';
-      reviewBox.style.padding = '0.5rem';
-      reviewBox.style.borderRadius = '6px';
-      reviewBox.style.fontSize = '0.85rem';
+      const reviewBox = el('div', 'review-box small-text');
       const stars = '★'.repeat(b.review_rating) + '☆'.repeat(5 - b.review_rating);
-      reviewBox.innerHTML = `<span style="color:#f59e0b;font-weight:bold;">${stars}</span> ${b.review_comment ? `"${b.review_comment}"` : ''}`;
+      reviewBox.append(el('span', 'review-stars', stars));
+      if (b.review_comment) reviewBox.append(` "${b.review_comment}"`);
       body.append(reviewBox);
     }
 
@@ -161,20 +154,20 @@ function openPaymentModal(booking) {
   );
 
   const form = el('form');
-  form.style.marginTop = '1rem';
+  form.classList.add('modal-form');
 
   const methodGroup = el('div', 'form-group');
   methodGroup.append(el('label', null, 'Select Payment Method'));
   const select = el('select');
-  select.innerHTML = `
-    <option value="CARD">Credit / Debit Card (Simulated)</option>
-    <option value="UPI">UPI / Instant Pay (Simulated)</option>
-    <option value="NET_BANKING">Net Banking (Simulated)</option>
-  `;
+  [['CARD', 'Credit / Debit Card (Simulated)'], ['UPI', 'UPI / Instant Pay (Simulated)'], ['NET_BANKING', 'Net Banking (Simulated)']]
+    .forEach(([value, label]) => {
+      const option = el('option', null, label);
+      option.value = value;
+      select.append(option);
+    });
   methodGroup.append(select);
 
-  const note = el('p', 'muted');
-  note.style.fontSize = '0.8rem';
+  const note = el('p', 'muted small-text');
   note.textContent = 'Note: This is a simulation. No real card details are entered, stored, or processed.';
 
   const feedback = el('div', 'alert');
@@ -290,7 +283,7 @@ function openReviewModal(booking) {
   );
 
   const form = el('form');
-  form.style.marginTop = '1rem';
+  form.classList.add('modal-form');
 
   let selectedRating = 5;
 

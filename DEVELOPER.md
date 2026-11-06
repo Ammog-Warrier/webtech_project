@@ -170,14 +170,21 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 | index | Landing page; logged-in customers also see a personalized dashboard (name and email from `/api/auth/me`, via `js/home.js`) |
 | destinations | Working: lists destinations from the API, links to filtered packages |
 | packages | Working: lists packages; filter by destination, text search, min/max price, sort (price, duration), clear filters, results count (all client-side in `js/packages.js`); links to the detail page |
-| package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size, upcoming departures with live seat count, direct Book Date button) |
+| package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size, upcoming departures with live seat count, direct Book Date button, and a month calendar of departures coloured by seat availability that links open dates to the booking form) |
 | booking | Working: `booking.html?package_id=<id>&departure_id=<id>` customer booking form with dynamic departure selection, guest count slider/input, live price breakdown, and seat availability validation |
-| my-bookings | Working: customer booking dashboard showing active/past bookings, status badges, simulated payment modal, cancellation with refund modal, and review submission modal |
+| my-bookings | Working: customer booking dashboard with a trip calendar (the customer's own trips by month) and showing active/past bookings, status badges, simulated payment modal, cancellation with refund modal, and review submission modal |
+| wishlist | Working: customer-only saved packages page (remove with the heart). Heart toggles (`js/wishlist.js`) also appear on `packages` cards and the `package` detail page, for logged-in customers only; a Wishlist link is added to the customer navbar |
 | profile | Working: view & edit customer contact info, phone, and postal address with upsert functionality |
 | login | Working: token authentication, error alerts, redirect by role |
 | provider-dashboard | Working: provider approval status and package/booking/performance summary |
 | provider-packages | Working: approved providers can list, create, edit and archive their own packages |
 | admin-customers / admin-providers / admin-destinations / admin-categories | Working: admin management pages (search, status filters, create/edit/delete where allowed) |
+| admin-packages | Working: package moderation (search, status filter, pagination, detail view, approve or reject with a reason); needs `MODERATE_PACKAGES` |
+| admin-bookings | Working: read-only booking monitor (status, payment, date and text filters, pagination, detail view); needs `VIEW_BOOKINGS` |
+| superadmin-admins | Working: SUPER_ADMIN only. Create, edit, enable/disable and delete admin accounts, and edit each admin's permission checklist; linked from the admin dashboard (shown only to super admins) |
+| superadmin-settings | Working: SUPER_ADMIN only. Edit `maintenance_mode` (with a confirmation before turning it on) and `booking_cancellation_hours_limit`; the server's validation errors are shown as returned |
+| superadmin-logs | Working: SUPER_ADMIN only. Paginated audit log with search, action, entity and date filters |
+| admin-reports | Working: platform report for an optional date range (totals, monthly trend, top packages and providers, destination and category breakdown); needs `VIEW_REPORTS` |
 | provider-departures / provider-bookings / provider-performance / provider-reports | Working: provider departure CRUD, owned bookings, earnings and reviews, business reports |
 | register | Working: customer/provider sign-up, validation, auto-login & redirect |
 
@@ -186,10 +193,11 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 ## Notes for frontend developers
 - **Token:** `POST /api/auth/login` returns `{ token, user }`; send `Authorization: Bearer <token>` on every request (`js/api.js` does this). Tokens last 8 hours.
 - **Who am I:** `GET /api/auth/me` returns the user; for ADMIN and SUPER_ADMIN it also returns `permissions` (see "Admin permissions"). Use it to hide admin menu items, but the backend enforces them anyway.
+- **Handled globally in `js/api.js`:** a 401 with a stored token clears the session and sends the user to `login.html?redirect=...`; a 503 shows a maintenance banner (`showMaintenanceNotice` in `js/main.js`). 429 and other messages come from the API and are shown by the page (e.g. the login form).
 - **Status codes to handle:** 401 (no or expired token: go to login), 403 (not allowed, or the account was disabled or the provider is not approved), 429 (too many failed logins), 503 (maintenance mode: show a notice; admins are not affected).
 - **Lists:** admin lists return arrays; add `?page=&limit=` for the pagination envelope. `GET /api/superadmin/logs` is always paginated.
 - **Dates:** send and receive `YYYY-MM-DD`; months are `YYYY-MM`. Money values are numbers in rupees.
-- **Admin pages still to build:** package moderation, booking monitoring, reports, and the whole super admin area (admins, permissions, logs, settings), plus a wishlist heart/page and a calendar view for customers.
+- **Calendar widget:** `js/calendar.js` (`buildCalendar`) is shared; `package-calendar.js` and `trip-calendar.js` feed it from the two calendar endpoints.
 
 ## Running the API tests
 `npm run test:api` (server running first). `tests/api.test.js` is a plain Node script that logs in with the demo accounts, exercises every module (roles, permissions, validation, isolation between providers, money figures, wishlist, calendar, settings, hostile input) and prints a pass/fail list. Each section removes the data it creates, so it can be re-run at any time. Add a section there when you add an endpoint.
@@ -213,6 +221,13 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Frontend error handling: expired tokens redirect to login, maintenance mode (503) shows a site banner.
+- 2026-11-06: Booking calendar frontend: shared `calendar.js` widget, departure calendar on the package page and trip calendar on my-bookings.
+- 2026-11-06: Customer wishlist frontend: `wishlist` page, heart toggles on package cards and detail page, navbar link (`js/wishlist.js`, `js/wishlist-page.js`).
+- 2026-11-06: Super admin frontend: `superadmin-settings` and `superadmin-logs` pages plus dashboard shortcuts.
+- 2026-11-06: Super admin frontend: `superadmin-admins` page (admin accounts and permissions) and a super-admin-only shortcut on the admin dashboard.
+- 2026-11-06: Security and style cleanup: admin customer, provider and destination tables and details, and the customer review/payment snippets, are built with DOM nodes and `textContent` instead of `innerHTML` (the review comment was not escaped); static inline styles moved into CSS classes. Admin helpers `dataButton` and `fillDetailPanel` added.
+- 2026-11-06: Admin frontend: package moderation, booking monitoring and reports pages; shared `admin-common.js`; dashboard and category page updates.
 - 2026-11-06: Final backend hardening: migration 014 (reporting indexes); richer `seed.sql` (sample bookings, payment and review, demo admin permissions); login lockout after 5 failed attempts (429); request bodies must be JSON objects; malformed URLs return 400; 5xx responses no longer expose internal error messages; provider bookings `?status=` filter now works; duplicate departure date on create returns 409 instead of 500; API test suite expanded to cover isolation, reviews, edge cases and hostile input.
 - 2026-11-06: Booking calendar: `GET /api/packages/:id/calendar` and `GET /api/bookings/calendar` (month view with live seat status). Finished CONFIRMED trips are now stored as COMPLETED by an hourly sweep (`completePastBookings`).
 - 2026-11-06: Wishlist: migration 013 (`wishlists` table), `GET/POST /api/wishlist`, `DELETE /api/wishlist/:packageId`.
@@ -262,7 +277,7 @@ All require an APPROVED provider (`requireApprovedProvider`) except the dashboar
 Departure and booking endpoints are described in their own sections below.
 
 Provider frontend pages: `provider-dashboard`, `provider-packages`, `provider-departures`, `provider-bookings`, `provider-performance` (earnings/reviews), `provider-reports`.
-Admin frontend pages built so far: `admin-dashboard`, `admin-customers`, `admin-providers`, `admin-destinations`, `admin-categories`. Backend endpoints exist for package moderation, booking monitoring, reports, admin accounts, permissions, logs and settings; their pages are still to be built.
+Admin frontend pages: `admin-dashboard`, `admin-customers`, `admin-providers`, `admin-destinations`, `admin-categories`, `admin-packages`, `admin-bookings`, `admin-reports`. They share `js/admin-common.js` (table, pager, status pill and form helpers).
 
 ## Provider departure management
 

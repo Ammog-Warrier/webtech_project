@@ -192,24 +192,54 @@
               <span>Browse published travel packages</span>
             </a>
 
-            <a class="admin-shortcut-card" href="/admin-customers.html">
+            <a class="admin-shortcut-card" href="/admin-customers.html" data-permission="MANAGE_CUSTOMERS">
               <strong>Customer management</strong>
               <span>View, search, block and unblock customer accounts</span>
             </a>
 
-            <a class="admin-shortcut-card" href="/admin-destinations.html">
+            <a class="admin-shortcut-card" href="/admin-destinations.html" data-permission="MANAGE_CATALOGUE">
               <strong>Destination management</strong>
               <span>Create, edit and delete travel destinations</span>
             </a>
 
-            <a class="admin-shortcut-card" href="/admin-categories.html">
+            <a class="admin-shortcut-card" href="/admin-categories.html" data-permission="MANAGE_CATALOGUE">
               <strong>Category management</strong>
               <span>Create, edit and manage package categories</span>
             </a>
 
-            <a class="admin-shortcut-card" href="/admin-providers.html">
+            <a class="admin-shortcut-card" href="/admin-providers.html" data-permission="MANAGE_PROVIDERS">
               <strong>Provider management</strong>
               <span>Approve, reject, block and manage providers</span>
+            </a>
+
+            <a class="admin-shortcut-card" href="/admin-packages.html" data-permission="MODERATE_PACKAGES">
+              <strong>Package moderation</strong>
+              <span>Approve or reject packages submitted by providers</span>
+            </a>
+
+            <a class="admin-shortcut-card" href="/admin-bookings.html" data-permission="VIEW_BOOKINGS">
+              <strong>Booking monitoring</strong>
+              <span>Watch every booking and payment on the platform</span>
+            </a>
+
+            <a class="admin-shortcut-card" href="/admin-reports.html" data-permission="VIEW_REPORTS">
+              <strong>Platform reports</strong>
+              <span>Revenue, trends and top packages, providers and destinations</span>
+            </a>
+
+            <a class="admin-shortcut-card" href="/superadmin-settings.html" data-role="SUPER_ADMIN">
+              <strong>System settings</strong>
+              <span>Maintenance mode and the booking cancellation window</span>
+            </a>
+
+            <a class="admin-shortcut-card" href="/superadmin-logs.html" data-role="SUPER_ADMIN">
+              <strong>System logs</strong>
+              <span>Review who changed what across the platform</span>
+            </a>
+
+            <a class="admin-shortcut-card" href="/superadmin-admins.html" data-role="SUPER_ADMIN">
+              <strong>Admin accounts</strong>
+              <span>Create admins, enable or disable them and set their permissions</span>
             </a>
 
           </div>
@@ -221,7 +251,7 @@
 
   <footer class="site-footer">
     <div class="container">
-      <span class="status" id="health-status" style="color:var(--c-ink)">
+      <span class="status" id="health-status">
         Checking server…
       </span>
       <p>© Local Tourism Package Booking System</p>
