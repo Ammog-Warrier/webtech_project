@@ -220,7 +220,13 @@ function syncNavbarAuth() {
       profileLink.textContent = 'Profile';
       profileLink.className = 'nav-link-customer';
 
+      const wishlistLink = document.createElement('a');
+      wishlistLink.href = '/wishlist.html';
+      wishlistLink.textContent = 'Wishlist';
+      wishlistLink.className = 'nav-link-customer';
+
       authContainer.prepend(profileLink);
+      authContainer.prepend(wishlistLink);
       authContainer.prepend(myBookingsLink);
     }
 

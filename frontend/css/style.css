@@ -1015,3 +1015,11 @@ a.admin-shortcut-card:hover { transform: translateY(-2px); border-color: var(--c
 .permission-item { display: flex; gap: .7rem; align-items: flex-start; cursor: pointer; }
 .permission-item input { margin-top: .3rem; }
 .permission-item small { display: block; color: var(--c-muted, inherit); }
+
+/* Wishlist */
+.wishlist-btn { margin-top: .8rem; margin-left: .5rem; padding: .45rem .9rem; border: 1px solid var(--c-border); border-radius: 999px; background: var(--c-card-bg); color: var(--c-ink); cursor: pointer; font: inherit; font-size: .9rem; }
+.wishlist-btn.is-saved { color: #c0392b; border-color: #c0392b; }
+.wishlist-btn.has-error { border-style: dashed; }
+.wishlist-btn:disabled { opacity: .6; cursor: wait; }
+.wishlist-inline { margin-left: .75rem; }
+.book-package-btn { margin-top: 1.5rem; display: inline-block; }

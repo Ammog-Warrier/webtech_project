@@ -173,6 +173,7 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 | package | Working: detail page for `package.html?id=<id>` (description, itinerary, inclusions, group size, upcoming departures with live seat count, direct Book Date button) |
 | booking | Working: `booking.html?package_id=<id>&departure_id=<id>` customer booking form with dynamic departure selection, guest count slider/input, live price breakdown, and seat availability validation |
 | my-bookings | Working: customer booking dashboard showing active/past bookings, status badges, simulated payment modal, cancellation with refund modal, and review submission modal |
+| wishlist | Working: customer-only saved packages page (remove with the heart). Heart toggles (`js/wishlist.js`) also appear on `packages` cards and the `package` detail page, for logged-in customers only; a Wishlist link is added to the customer navbar |
 | profile | Working: view & edit customer contact info, phone, and postal address with upsert functionality |
 | login | Working: token authentication, error alerts, redirect by role |
 | provider-dashboard | Working: provider approval status and package/booking/performance summary |
@@ -195,7 +196,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 - **Status codes to handle:** 401 (no or expired token: go to login), 403 (not allowed, or the account was disabled or the provider is not approved), 429 (too many failed logins), 503 (maintenance mode: show a notice; admins are not affected).
 - **Lists:** admin lists return arrays; add `?page=&limit=` for the pagination envelope. `GET /api/superadmin/logs` is always paginated.
 - **Dates:** send and receive `YYYY-MM-DD`; months are `YYYY-MM`. Money values are numbers in rupees.
-- **Pages still to build:** a wishlist heart/page and a calendar view for customers.
+- **Pages still to build:** a calendar view for customers.
 
 ## Running the API tests
 `npm run test:api` (server running first). `tests/api.test.js` is a plain Node script that logs in with the demo accounts, exercises every module (roles, permissions, validation, isolation between providers, money figures, wishlist, calendar, settings, hostile input) and prints a pass/fail list. Each section removes the data it creates, so it can be re-run at any time. Add a section there when you add an endpoint.
@@ -219,6 +220,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Customer wishlist frontend: `wishlist` page, heart toggles on package cards and detail page, navbar link (`js/wishlist.js`, `js/wishlist-page.js`).
 - 2026-11-06: Super admin frontend: `superadmin-settings` and `superadmin-logs` pages plus dashboard shortcuts.
 - 2026-11-06: Super admin frontend: `superadmin-admins` page (admin accounts and permissions) and a super-admin-only shortcut on the admin dashboard.
 - 2026-11-06: Security and style cleanup: admin customer, provider and destination tables and details, and the customer review/payment snippets, are built with DOM nodes and `textContent` instead of `innerHTML` (the review comment was not escaped); static inline styles moved into CSS classes. Admin helpers `dataButton` and `fillDetailPanel` added.
