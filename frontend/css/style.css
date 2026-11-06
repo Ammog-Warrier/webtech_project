@@ -1009,3 +1009,9 @@ a.admin-shortcut-card:hover { transform: translateY(-2px); border-color: var(--c
 .modal-form { margin-top: 1rem; }
 .optional-hint { font-weight: normal; font-size: .85em; }
 .page-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+
+/* Super admin: permission checklist and log details */
+.permission-list { display: grid; gap: .6rem; margin: 1rem 0; }
+.permission-item { display: flex; gap: .7rem; align-items: flex-start; cursor: pointer; }
+.permission-item input { margin-top: .3rem; }
+.permission-item small { display: block; color: var(--c-muted, inherit); }
