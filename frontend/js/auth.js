@@ -57,3 +57,48 @@ function getRoleDashboardUrl(role) {
       return '/packages.html';
   }
 }
+
+function showPageNotice(message) {
+  const main = document.querySelector('main');
+  if (!main) return;
+  const box = document.createElement('div');
+  box.className = 'container section';
+  const note = document.createElement('p');
+  note.className = 'auth-alert auth-alert-error show';
+  note.textContent = message;
+  box.append(note);
+  main.replaceChildren(box);
+}
+
+// Route guard for role-restricted pages. Verifies the session with the server, then checks the role
+// (and, for ADMIN accounts, the permission). Returns the user, or null after redirecting or showing a
+// notice. The backend enforces the same rules; this only keeps people out of pages they cannot use.
+async function guardPage(roles, permission) {
+  const here = encodeURIComponent(location.pathname + location.search);
+  if (!getToken()) {
+    window.location.replace(`/login.html?redirect=${here}`);
+    return null;
+  }
+  let user;
+  try {
+    user = await apiFetch('/auth/me');
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch (err) {
+    if (err.status === 401 || err.status === 403) {
+      clearSession({ redirect: false });
+      window.location.replace(`/login.html?redirect=${here}`);
+    } else {
+      showPageNotice(err.message || 'The server is not reachable. Please try again.');
+    }
+    return null;
+  }
+  if (!roles.includes(user.role)) {
+    window.location.replace(getRoleDashboardUrl(user.role));
+    return null;
+  }
+  if (permission && user.role === 'ADMIN' && !(user.permissions || []).includes(permission)) {
+    showPageNotice('You do not have permission to use this page. Ask a super admin to grant access.');
+    return null;
+  }
+  return user;
+}

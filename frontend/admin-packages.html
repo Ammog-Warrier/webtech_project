@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Package moderation · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a>
+      <a href="/admin-dashboard.html">Admin</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
+    </nav>
+  </div></header>
+
+  <main class="section"><div class="container admin-dashboard">
+    <div class="admin-dashboard-heading">
+      <div><p class="eyebrow">ADMINISTRATION</p><h1>Package moderation</h1><p class="muted">Review packages submitted by providers and approve or reject them.</p></div>
+      <a class="btn btn-secondary" href="/admin-dashboard.html">Back to dashboard</a>
+    </div>
+    <div id="page-status" class="admin-dashboard-status" role="status" aria-live="polite">Loading…</div>
+    <p id="page-error" class="auth-alert" role="alert"></p>
+
+    <form class="toolbar" id="filters" aria-label="Package filters">
+      <div class="form-group form-group-grow"><label for="search">Search</label><input id="search" type="search" placeholder="Title, destination or provider"></div>
+      <div class="form-group"><label for="status">Status</label>
+        <select id="status"><option value="ALL">All packages</option><option value="PENDING">Pending review</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="ARCHIVED">Archived</option></select></div>
+      <button type="button" id="refresh" class="btn btn-secondary">Refresh</button>
+    </form>
+    <div class="table-responsive"><table class="data-table">
+      <thead><tr><th>Package</th><th>Provider</th><th>Destination</th><th>Price</th><th>Status</th><th>Submitted</th><th>Actions</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7">Loading…</td></tr></tbody>
+    </table></div>
+    <div id="pager" class="pager"></div>
+    <section id="detail" class="detail-panel" aria-live="polite" hidden></section>
+  </div></main>
+
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/admin-common.js"></script>
+  <script src="/js/admin-packages.js"></script>
+</body>
+</html>

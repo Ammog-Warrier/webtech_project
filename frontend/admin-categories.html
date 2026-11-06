@@ -2,19 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Manage Categories | Local Tourism</title>
-  <link rel="stylesheet" href="css/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manage categories · Local Tourism</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('lt_theme');
+      var theme = (saved === 'dark' || saved === 'light') ? saved : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
 </head>
 <body>
-  <header class="site-header">
-    <nav class="navbar container">
-      <a class="logo" href="index.html">Local Tourism</a>
-      <div class="nav-links"><a href="admin-dashboard.html">Admin Dashboard</a></div>
+  <header class="site-header"><div class="container">
+    <a class="logo" href="/">Local Tourism</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/destinations.html">Destinations</a>
+      <a href="/packages.html">Packages</a>
+      <a href="/admin-dashboard.html">Admin</a>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></button>
     </nav>
-  </header>
+  </div></header>
 
-  <main class="container section">
+  <main class="section"><div class="container">
+
     <div class="page-heading">
       <div>
         <p class="eyebrow">Administration</p>
@@ -23,7 +35,7 @@
       </div>
     </div>
 
-    <section class="card" style="margin-bottom: 1.5rem;">
+    <section class="detail-panel" >
       <h2 id="form-title">Add category</h2>
       <form id="category-form">
         <input type="hidden" id="category-id">
@@ -58,10 +70,14 @@
         </table>
       </div>
     </section>
-  </main>
 
-<script src="js/main.js"></script>
-<script src="js/api.js"></script>
-<script src="js/admin-categories.js"></script>
+  </div></main>
+
+  <footer class="site-footer"><div class="container"><span class="status" id="health-status" style="color:var(--c-ink)">Checking server…</span><p>© Local Tourism Package Booking System</p></div></footer>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/admin-categories.js"></script>
 </body>
 </html>

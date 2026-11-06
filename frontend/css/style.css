@@ -967,3 +967,33 @@ a.admin-shortcut-card:hover { transform: translateY(-2px); border-color: var(--c
 .admin-account-status.is-pending { color:#b7791f; background:rgba(217,119,6,.12); }
 .admin-customer-details { padding:1.2rem; border:1px solid var(--c-border); border-radius:var(--radius); background:var(--c-card-bg); }
 .admin-customer-details p { margin:.45rem 0; }
+
+/* Shared layout helpers for the admin, super admin and customer feature pages */
+.page-heading, .section-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1rem; }
+.page-heading h1 { font-size:clamp(1.8rem, 4vw, 2.5rem); margin-bottom:.25rem; }
+.button-group { display:flex; gap:.6rem; flex-wrap:wrap; }
+.btn-small { padding:.45rem .7rem; font-size:.85rem; }
+.toolbar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:.75rem; margin-bottom:1rem; }
+.toolbar .form-group { margin:0; min-width:150px; }
+.toolbar .form-group-grow { flex:1 1 220px; }
+.data-table { width:100%; border-collapse:collapse; background:var(--c-card-bg); }
+.data-table th, .data-table td { padding:.8rem .9rem; text-align:left; border-bottom:1px solid var(--c-border); vertical-align:middle; }
+.data-table th { white-space:nowrap; color:var(--c-muted); font-size:.88rem; }
+.data-table td small { display:block; margin-top:.2rem; color:var(--c-muted); }
+.data-table tr.is-selected { background:var(--c-surface, rgba(127,127,127,.08)); }
+.pager { display:flex; align-items:center; justify-content:center; gap:1rem; margin-top:1rem; flex-wrap:wrap; }
+.detail-panel { margin-top:1.2rem; padding:1.2rem; border:1px solid var(--c-border); border-radius:var(--radius); background:var(--c-card-bg); }
+.detail-panel h3 { margin-bottom:.6rem; }
+.detail-panel p { margin:.4rem 0; overflow-wrap:anywhere; }
+.detail-panel pre { white-space:pre-wrap; font:inherit; margin:.4rem 0 .8rem; }
+.admin-account-status.is-neutral { color:var(--c-muted); background:rgba(127,127,127,.15); }
+.report-section { margin-top:2rem; }
+.report-section h2 { font-size:1.35rem; margin-bottom:.8rem; }
+.checkbox-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:.6rem; margin:.6rem 0 1rem; }
+.checkbox-row { display:flex; gap:.6rem; align-items:flex-start; padding:.6rem .7rem; border:1px solid var(--c-border); border-radius:var(--radius); background:var(--c-card-bg); }
+.checkbox-row input { margin-top:.25rem; }
+.checkbox-row small { display:block; color:var(--c-muted); }
+@media (max-width: 600px) {
+  .toolbar .form-group, .toolbar .btn { flex:1 1 100%; }
+  .data-table th, .data-table td { padding:.6rem .6rem; }
+}
