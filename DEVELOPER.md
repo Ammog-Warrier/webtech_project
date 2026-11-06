@@ -181,6 +181,8 @@ Schema changes: add `database/migrations/NNN_description.sql` and update `schema
 | admin-packages | Working: package moderation (search, status filter, pagination, detail view, approve or reject with a reason); needs `MODERATE_PACKAGES` |
 | admin-bookings | Working: read-only booking monitor (status, payment, date and text filters, pagination, detail view); needs `VIEW_BOOKINGS` |
 | superadmin-admins | Working: SUPER_ADMIN only. Create, edit, enable/disable and delete admin accounts, and edit each admin's permission checklist; linked from the admin dashboard (shown only to super admins) |
+| superadmin-settings | Working: SUPER_ADMIN only. Edit `maintenance_mode` (with a confirmation before turning it on) and `booking_cancellation_hours_limit`; the server's validation errors are shown as returned |
+| superadmin-logs | Working: SUPER_ADMIN only. Paginated audit log with search, action, entity and date filters |
 | admin-reports | Working: platform report for an optional date range (totals, monthly trend, top packages and providers, destination and category breakdown); needs `VIEW_REPORTS` |
 | provider-departures / provider-bookings / provider-performance / provider-reports | Working: provider departure CRUD, owned bookings, earnings and reviews, business reports |
 | register | Working: customer/provider sign-up, validation, auto-login & redirect |
@@ -193,7 +195,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 - **Status codes to handle:** 401 (no or expired token: go to login), 403 (not allowed, or the account was disabled or the provider is not approved), 429 (too many failed logins), 503 (maintenance mode: show a notice; admins are not affected).
 - **Lists:** admin lists return arrays; add `?page=&limit=` for the pagination envelope. `GET /api/superadmin/logs` is always paginated.
 - **Dates:** send and receive `YYYY-MM-DD`; months are `YYYY-MM`. Money values are numbers in rupees.
-- **Pages still to build:** super admin settings and logs, a wishlist heart/page and a calendar view for customers.
+- **Pages still to build:** a wishlist heart/page and a calendar view for customers.
 
 ## Running the API tests
 `npm run test:api` (server running first). `tests/api.test.js` is a plain Node script that logs in with the demo accounts, exercises every module (roles, permissions, validation, isolation between providers, money figures, wishlist, calendar, settings, hostile input) and prints a pass/fail list. Each section removes the data it creates, so it can be re-run at any time. Add a section there when you add an endpoint.
@@ -217,6 +219,7 @@ Frontend helpers: `js/api.js` (fetch wrapper with Bearer token injection), `js/a
 
 ## Changelog
 
+- 2026-11-06: Super admin frontend: `superadmin-settings` and `superadmin-logs` pages plus dashboard shortcuts.
 - 2026-11-06: Super admin frontend: `superadmin-admins` page (admin accounts and permissions) and a super-admin-only shortcut on the admin dashboard.
 - 2026-11-06: Security and style cleanup: admin customer, provider and destination tables and details, and the customer review/payment snippets, are built with DOM nodes and `textContent` instead of `innerHTML` (the review comment was not escaped); static inline styles moved into CSS classes. Admin helpers `dataButton` and `fillDetailPanel` added.
 - 2026-11-06: Admin frontend: package moderation, booking monitoring and reports pages; shared `admin-common.js`; dashboard and category page updates.
